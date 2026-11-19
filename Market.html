@@ -1,0 +1,1456 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Market Depths</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;700&family=Press+Start+2P&display=swap">
+<style>
+/* Layout: one deep-sea station. Title screen is a two-column hero (logo + menu | dive log). The game screen is a HUD bar over a canvas room with a side panel for clues. */
+:root {
+  --abyss: #050a14;
+  --deep: #0a1526;
+  --panel: #0e1d33;
+  --panel-hi: #163355;
+  --edge: #2a4560;
+  --edge-hi: #4f78a0;
+  --ink: #e8f7ff;
+  --mute: #9bb4ca;
+  --teal: #3ee6d0;
+  --teal-dk: #138a7d;
+  --gold: #ffcf5c;
+  --coral: #ff6f7d;
+  --kelp: #6be38a;
+  --black: #02060d;
+  --f-head: 'Press Start 2P', 'Courier New', monospace;
+  --f-body: 'Pixelify Sans', 'Courier New', monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body {
+  margin: 0; background: var(--abyss); color: var(--ink);
+  font: 400 17px/1.5 var(--f-body);
+  padding-block: 20px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  -webkit-font-smoothing: none; font-smooth: never;
+}
+#bg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; image-rendering: pixelated; display: block; }
+h1, h2, h3, p { margin: 0; }
+b { font-weight: 700; }
+:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+button { font-family: inherit; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+kbd { display: inline-block; min-width: 1.7em; padding: 0 .4em; text-align: center; background: var(--panel-hi); color: var(--ink); font: 700 .85em var(--f-body); box-shadow: inset 0 0 0 2px var(--edge-hi), 0 3px 0 var(--black); margin: 0 .1em; }
+
+[hidden] { display: none !important; }
+.screen { max-width: 1180px; margin: 0 auto; }
+
+/* ---------- pixel UI parts ---------- */
+.panel { background: var(--panel); border: 4px solid var(--black); box-shadow: inset 0 0 0 3px var(--edge), 0 6px 0 var(--black); padding: 18px 20px; }
+.btn {
+  display: block; width: 100%; text-align: left; cursor: pointer; border: 0; color: var(--ink);
+  background: var(--panel-hi); font: 700 19px/1.2 var(--f-body); padding: 14px 18px;
+  box-shadow: inset 0 0 0 3px var(--edge-hi), 0 5px 0 var(--black); transform: translateY(0);
+}
+.btn:hover { background: #1d4272; }
+.btn:active { transform: translateY(4px); box-shadow: inset 0 0 0 3px var(--edge-hi), 0 1px 0 var(--black); }
+.btn.primary { background: var(--teal); color: #032028; box-shadow: inset 0 0 0 3px #a4fff2, 0 5px 0 var(--teal-dk), 0 6px 0 2px var(--black); }
+.btn.primary:hover { background: #6af2de; }
+.btn.primary:active { box-shadow: inset 0 0 0 3px #a4fff2, 0 1px 0 var(--teal-dk), 0 2px 0 2px var(--black); }
+.btn.small { width: auto; display: inline-block; font-size: 16px; padding: 9px 14px; }
+.btn.danger { background: #5a1f2c; box-shadow: inset 0 0 0 3px var(--coral), 0 5px 0 var(--black); }
+.btn:disabled { cursor: not-allowed; }
+.chip { display: inline-block; font: 700 14px/1 var(--f-body); padding: 4px 7px 5px; background: #261f08; color: var(--gold); box-shadow: inset 0 0 0 2px #6b5416; vertical-align: middle; }
+.chip.hl { background: #2a0e1c; color: var(--coral); box-shadow: inset 0 0 0 2px #7a2a3d; margin-left: 6px; }
+.dim { color: var(--mute); }
+.stars { display: inline-flex; gap: 3px; vertical-align: middle; }
+.star { width: 20px; height: 20px; fill: #20384f; }
+.star.on { fill: var(--gold); }
+.head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.head h2 { font: 400 clamp(16px, 3.4vw, 24px)/1.3 var(--f-head); text-wrap: balance; flex: 1 1 220px; min-width: 0; }
+.back { flex: none; }
+
+/* ---------- title ---------- */
+.hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 36px; align-items: center; min-height: calc(100vh - 80px); padding-block: 16px; }
+.logo { font: 400 clamp(28px, 6.2vw, 62px)/1.15 var(--f-head); color: var(--ink); text-shadow: 4px 4px 0 var(--teal-dk), 8px 8px 0 var(--black); letter-spacing: -.02em; text-wrap: balance; }
+.sub { margin-top: 26px; font-size: 20px; color: var(--mute); max-width: 36ch; }
+.sub b { color: var(--ink); }
+.menu { margin-top: 30px; display: grid; gap: 14px; max-width: 380px; }
+.log h2 { font: 400 15px/1.4 var(--f-head); margin-bottom: 16px; }
+.log-body { display: grid; grid-template-columns: 26px 1fr; gap: 18px; }
+.gauge { background: #04101e; box-shadow: inset 0 0 0 3px var(--edge); position: relative; min-height: 150px; }
+.gauge i { position: absolute; left: 3px; right: 3px; top: 3px; bottom: 3px; display: block; background: repeating-linear-gradient(to bottom, transparent 0 14px, rgba(4,16,30,.9) 14px 16px), linear-gradient(to bottom, var(--teal), #1a6b9a); transform-origin: top; height: calc(100% - 6px); clip-path: inset(0 0 calc(100% - var(--fill, 0%)) 0); }
+.stats { display: grid; gap: 12px; }
+.stat { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; border-bottom: 2px dashed var(--edge); padding-bottom: 8px; }
+.stat span { color: var(--mute); }
+.stat b { font-size: 20px; }
+.next { margin-top: 16px; color: var(--mute); }
+.next b { color: var(--ink); }
+.foot { margin-top: 28px; color: var(--mute); font-size: 15px; max-width: 46ch; }
+
+/* ---------- room select ---------- */
+.rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: 16px; }
+.room { position: relative; display: flex; flex-direction: column; gap: 10px; text-align: left; min-height: 170px; padding: 16px 16px 14px; cursor: pointer; color: var(--ink); border: 4px solid var(--black); background: var(--panel); box-shadow: inset 0 0 0 3px var(--edge), 0 6px 0 var(--black); }
+.room:hover:not(:disabled) { background: var(--panel-hi); box-shadow: inset 0 0 0 3px var(--teal), 0 6px 0 var(--black); }
+.room:active:not(:disabled) { transform: translateY(4px); box-shadow: inset 0 0 0 3px var(--teal), 0 2px 0 var(--black); }
+.room.cleared { box-shadow: inset 0 0 0 3px #2f8a58, 0 6px 0 var(--black); }
+.room.sealed { opacity: .55; cursor: not-allowed; background: #0a1628; }
+.room-n { font: 400 22px/1 var(--f-head); color: var(--teal); }
+.room.sealed .room-n { color: var(--edge-hi); }
+.room-name { font: 700 20px/1.2 var(--f-body); }
+.room-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; flex-wrap: wrap; }
+
+/* ---------- notes ---------- */
+.tabs { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; align-items: center; }
+.tabs .count { margin-left: auto; color: var(--mute); }
+.tabs button { cursor: pointer; border: 0; color: var(--ink); background: var(--panel); padding: 9px 16px; font: 700 17px var(--f-body); box-shadow: inset 0 0 0 3px var(--edge), 0 4px 0 var(--black); }
+.tabs button[aria-pressed="true"] { background: var(--teal); color: #032028; box-shadow: inset 0 0 0 3px #a4fff2, 0 4px 0 var(--black); }
+.note-room { margin-bottom: 18px; }
+.note-room h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font: 700 20px/1.3 var(--f-body); margin-bottom: 10px; }
+.note-room h3 small { margin-left: auto; color: var(--mute); font-size: 15px; font-weight: 400; }
+.note-room ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.note-room li { background: var(--panel); border: 4px solid var(--black); box-shadow: inset 0 0 0 3px var(--edge); padding: 12px 14px; display: grid; gap: 4px; min-width: 0; }
+.note-room li b { color: var(--teal); }
+.note-room li span { color: var(--ink); }
+.note-room li.locked { background: #0a1628; }
+.note-room li.locked b, .note-room li.locked span { color: #6e88a0; }
+
+/* ---------- how + settings ---------- */
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+.cols h3 { font: 400 14px/1.4 var(--f-head); margin-bottom: 14px; color: var(--teal); }
+.keys { display: grid; gap: 12px; }
+.keys div { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.keys .cap { display: flex; gap: 4px; min-width: 150px; }
+.keys .cap kbd { min-width: 38px; padding: 5px 4px; font-size: 18px; }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 12px; }
+.steps li { counter-increment: s; padding-left: 44px; position: relative; }
+.steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 30px; height: 30px; display: grid; place-items: center; background: var(--teal); color: #032028; font: 400 13px var(--f-head); box-shadow: 0 3px 0 var(--black); }
+.small-note { margin-top: 16px; color: var(--mute); font-size: 15px; }
+.tog { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; text-align: left; cursor: pointer; border: 0; color: var(--ink); background: var(--panel); padding: 14px 18px; box-shadow: inset 0 0 0 3px var(--edge), 0 4px 0 var(--black); }
+.tog:hover { background: var(--panel-hi); }
+.tog-t { display: grid; gap: 2px; min-width: 0; }
+.tog-t b { font-size: 19px; }
+.tog-t small { color: var(--mute); font-size: 15px; }
+.tog-s { flex: none; min-width: 64px; text-align: center; padding: 6px 10px; background: #1a2b40; font-weight: 700; box-shadow: inset 0 0 0 2px var(--edge-hi); }
+.tog[aria-checked="true"] .tog-s { background: var(--teal); color: #032028; box-shadow: inset 0 0 0 2px #a4fff2; }
+#set-list { display: grid; gap: 12px; margin-bottom: 22px; }
+
+/* ---------- game ---------- */
+#scr-game { max-width: 1560px; display: flex; flex-direction: column; gap: 14px; }
+.hud { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; background: var(--panel); border: 4px solid var(--black); box-shadow: inset 0 0 0 3px var(--edge), 0 5px 0 var(--black); padding: 10px 16px; }
+.hud-room { display: grid; gap: 2px; min-width: 0; flex: 1 1 260px; }
+.hud-room small { color: var(--mute); font-size: 15px; }
+.hud-room b { font: 400 15px/1.4 var(--f-head); overflow-wrap: anywhere; }
+.hud-stat { display: grid; gap: 0; text-align: left; }
+.hud-stat small { color: var(--mute); font-size: 14px; line-height: 1.2; }
+.hud-stat b { font-size: 20px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.hud-btns { display: flex; gap: 10px; margin-left: auto; }
+.stage { display: flex; gap: 16px; align-items: stretch; }
+.view { flex: none; box-sizing: content-box; width: var(--cv-w, 864px); background: #000; border: 4px solid var(--black); box-shadow: 0 0 0 3px var(--edge), 0 8px 0 3px var(--black); }
+#cv { display: block; width: 100%; height: auto; aspect-ratio: 18 / 10; image-rendering: pixelated; max-width: 100%; }
+.side { position: relative; flex: 1 1 0; min-width: 0; }
+.side .cluebox { position: absolute; inset: 0; overflow: auto; padding: 14px 16px; }
+.under { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.ins { padding: 12px 16px; min-height: 108px; display: grid; gap: 6px; align-content: start; }
+.ins-tag { display: flex; align-items: center; gap: 8px; color: var(--mute); font-size: 15px; }
+.ins-main { font-weight: 700; font-size: 19px; line-height: 1.3; }
+.ins-sub { color: var(--mute); font-size: 16px; line-height: 1.4; }
+.ins-sub kbd, .ins kbd { font-size: 14px; }
+.hovertip { position: fixed; z-index: 60; max-width: min(340px, calc(100vw - 16px)); pointer-events: none; background: #04101e; color: var(--ink); padding: 8px 12px; font-size: 17px; line-height: 1.35; box-shadow: inset 0 0 0 3px var(--teal), 0 4px 0 var(--black); }
+.tip-pin { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 4px; background: var(--c, var(--teal)); color: #04121c; font: 400 11px/1 var(--f-head); vertical-align: middle; }
+.pin { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; background: var(--c, var(--teal)); color: #04121c; font: 400 12px/1 var(--f-head); font-style: normal; box-shadow: 0 3px 0 var(--black); }
+.cluebox { display: flex; flex-direction: column; gap: 8px; }
+.cluebox h2 { font: 400 13px/1.4 var(--f-head); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.cluebox h2 small { font: 400 15px var(--f-body); color: var(--mute); }
+#clues { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.clue { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; align-items: start; padding-bottom: 7px; border-bottom: 2px dashed var(--edge); }
+.clue:last-child { border-bottom: 0; padding-bottom: 0; }
+.clue div { display: grid; gap: 1px; min-width: 0; font-size: 15px; line-height: 1.3; }
+.clue div b { color: var(--c); font-size: 15px; }
+.cnt { font: 700 14px var(--f-body); font-style: normal; padding: 3px 6px; background: #1a2b40; color: var(--mute); }
+.clue.done .cnt { background: #174d33; color: var(--kelp); }
+.clue.done div span { color: var(--mute); }
+.feed { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; padding: 12px 16px; background: var(--panel); border: 4px solid var(--black); box-shadow: inset 0 0 0 3px var(--edge), 0 5px 0 var(--black); min-height: 108px; }
+#feed-tag { font: 400 12px/1 var(--f-head); padding: 8px 10px; background: var(--edge); color: var(--ink); white-space: nowrap; }
+.feed.ok { box-shadow: inset 0 0 0 3px #2f8a58, 0 5px 0 var(--black); } .feed.ok #feed-tag { background: var(--kelp); color: #04210f; }
+.feed.bad { box-shadow: inset 0 0 0 3px #b3354a, 0 5px 0 var(--black); } .feed.bad #feed-tag { background: var(--coral); color: #2a0610; }
+.feed.info #feed-tag { background: var(--gold); color: #2a1c02; }
+#feed-msg { font-size: 18px; line-height: 1.4; min-width: 0; }
+.keybar { display: flex; flex-wrap: wrap; gap: 8px 22px; color: var(--mute); font-size: 15px; }
+.pad { display: none; grid-template-columns: repeat(3, 58px) 1fr 100px; gap: 6px; align-items: center; touch-action: none; user-select: none; -webkit-user-select: none; }
+.pad button { height: 58px; border: 0; background: var(--panel-hi); color: var(--ink); font: 400 14px var(--f-head); box-shadow: inset 0 0 0 3px var(--edge-hi), 0 4px 0 var(--black); touch-action: none; }
+.pad button:active { background: var(--teal); color: #032028; }
+#tp-up { grid-column: 2; grid-row: 1; } #tp-left { grid-column: 1; grid-row: 2; } #tp-down { grid-column: 2; grid-row: 2; } #tp-right { grid-column: 3; grid-row: 2; }
+#tp-act { grid-column: 5; grid-row: 1 / span 2; height: 100%; min-height: 100px; background: var(--teal); color: #032028; }
+@media (pointer: coarse) { .pad { display: grid; } .keybar { display: none; } }
+
+/* ---------- overlays ---------- */
+.ov { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(2, 6, 13, .78); padding-block: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); overflow: auto; }
+.dlg { width: min(560px, 100%); display: grid; gap: 16px; }
+.dlg h2 { font: 400 clamp(16px, 3.6vw, 22px)/1.35 var(--f-head); text-wrap: balance; }
+.dlg .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--mute); }
+.dlg .actions { display: grid; gap: 12px; margin-top: 4px; }
+.dlg .tip { background: #0a1628; box-shadow: inset 0 0 0 3px var(--edge); padding: 12px 14px; font-size: 16px; }
+.dlg .tip b { color: var(--gold); }
+.statrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.statrow div { background: #0a1628; box-shadow: inset 0 0 0 3px var(--edge); padding: 10px 12px; display: grid; gap: 2px; }
+.statrow b { font-size: 22px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.statrow span { color: var(--mute); font-size: 14px; }
+.big-stars .star { width: 36px; height: 36px; }
+
+@media (max-width: 900px) {
+  .hero { grid-template-columns: 1fr; min-height: 0; gap: 28px; padding-block: 8px; }
+  .stage { flex-direction: column; }
+  .view { width: auto; }
+  .side { flex: none; }
+  .side .cluebox { position: static; overflow: visible; }
+  .under { grid-template-columns: 1fr; }
+  .hud-btns { margin-left: 0; width: 100%; }
+  .hud-btns .btn { flex: 1; text-align: center; }
+  .btn { font-size: 18px; }
+}
+@media (max-width: 520px) {
+  body { font-size: 16px; }
+  .statrow { grid-template-columns: 1fr; }
+  .menu { max-width: none; }
+  .keys .cap { min-width: 0; }
+  .feed { grid-template-columns: 1fr; gap: 8px; }
+  #feed-tag { justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) { .btn, .room { transition: none; } }
+</style>
+
+<canvas id="bg" aria-hidden="true"></canvas>
+
+<main>
+  <!-- TITLE -->
+  <section id="scr-title" class="screen" aria-labelledby="t-logo">
+    <div class="hero">
+      <div>
+        <h1 class="logo" id="t-logo">Market Depths</h1>
+        <p class="sub">A pixel dive for IB Business Management <b>topics 4.1 and 4.2</b>. Carry the right terms to the right pedestals to open each hatch.</p>
+        <nav class="menu" aria-label="Main menu">
+          <button class="btn primary" id="btn-play" type="button" data-focus>Start diving</button>
+          <button class="btn" id="btn-select" type="button">Select room</button>
+          <button class="btn" id="btn-notes" type="button">Study notes</button>
+          <button class="btn" id="btn-how" type="button">How to play</button>
+          <button class="btn" id="btn-settings" type="button">Settings</button>
+        </nav>
+        <p class="foot">Questions are original revision items written for this game. It is not endorsed by the International Baccalaureate.</p>
+      </div>
+      <aside class="panel log" aria-label="Dive log">
+        <h2>Dive log</h2>
+        <div class="log-body">
+          <div class="gauge" aria-hidden="true"><i id="log-fill"></i></div>
+          <div class="stats">
+            <div class="stat"><span>Deepest point</span><b id="log-depth">0 m</b></div>
+            <div class="stat"><span>Rooms cleared</span><b id="log-rooms">0 of 12</b></div>
+            <div class="stat"><span>Stars</span><b id="log-stars">0 of 36</b></div>
+          </div>
+        </div>
+        <p class="next" id="log-next"></p>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ROOM SELECT -->
+  <section id="scr-select" class="screen" aria-labelledby="s-h" hidden>
+    <div class="head"><button class="btn small back" type="button" data-back="title" data-focus>Back</button><h2 id="s-h">Select room</h2></div>
+    <div class="rooms" id="room-grid"></div>
+  </section>
+
+  <!-- NOTES -->
+  <section id="scr-notes" class="screen" aria-labelledby="n-h" hidden>
+    <div class="head"><button class="btn small back" type="button" data-back="title" data-focus>Back</button><h2 id="n-h">Study notes</h2></div>
+    <div class="tabs" id="notes-tabs">
+      <button type="button" data-f="all" aria-pressed="true">All</button>
+      <button type="button" data-f="4.1" aria-pressed="false">4.1</button>
+      <button type="button" data-f="4.2" aria-pressed="false">4.2</button>
+      <span class="count" id="notes-count"></span>
+    </div>
+    <div id="notes-list"></div>
+  </section>
+
+  <!-- HOW TO PLAY -->
+  <section id="scr-how" class="screen" aria-labelledby="h-h" hidden>
+    <div class="head"><button class="btn small back" type="button" data-back="title" data-focus>Back</button><h2 id="h-h">How to play</h2></div>
+    <div class="cols">
+      <div class="panel">
+        <h3>Controls</h3>
+        <div class="keys">
+          <div><span class="cap"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>Walk. The arrow keys work too.</span></div>
+          <div><span class="cap"><kbd>Space</kbd></span><span>Lift the block in front of you, or place the one you carry.</span></div>
+          <div><span class="cap"><kbd>R</kbd></span><span>Restart the room.</span></div>
+          <div><span class="cap"><kbd>Esc</kbd></span><span>Pause.</span></div>
+          <div><span class="cap"><kbd>M</kbd></span><span>Mute or unmute.</span></div>
+        </div>
+        <p class="small-note">Menus use the mouse. On a touch screen, an on-screen pad appears under the room.</p>
+      </div>
+      <div class="panel">
+        <h3>The goal</h3>
+        <ol class="steps">
+          <li>Read the clue beside each numbered pedestal in the panel next to the room.</li>
+          <li>Walk up to a block, face it and press <kbd>Space</kbd> to lift it. The panel describes whatever you face.</li>
+          <li>Face a pedestal and press <kbd>Space</kbd>. A correct block locks in and explains why.</li>
+          <li>A wrong block floats back to where it started. Some blocks are decoys.</li>
+          <li>When every pedestal is filled, the hatch opens. Walk onto it to dive deeper.</li>
+        </ol>
+        <p class="small-note">Three stars for no wrong placements, two for one or two, one for more. Every correct answer is saved in Study notes.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="scr-settings" class="screen" aria-labelledby="g-h" hidden>
+    <div class="head"><button class="btn small back" type="button" data-back="prev" data-focus>Back</button><h2 id="g-h">Settings</h2></div>
+    <div id="set-list"></div>
+    <button class="btn small" id="btn-reset" type="button">Erase progress and notes</button>
+  </section>
+
+  <!-- GAME -->
+  <section id="scr-game" class="screen" aria-label="Game" hidden>
+    <div class="hud">
+      <div class="hud-room"><small id="h-room">Room 1 of 12</small><b id="h-name">Docking Bay</b></div>
+      <div class="hud-stat"><small>Topic</small><b><span class="chip" id="h-topic">4.1.1</span><span class="chip hl" id="h-hl" hidden>HL</span></b></div>
+      <div class="hud-stat"><small>Depth</small><b id="h-depth">40 m</b></div>
+      <div class="hud-stat"><small>Placed</small><b id="h-solved">0 of 4</b></div>
+      <div class="hud-stat"><small>Wrong</small><b id="h-miss">0</b></div>
+      <div class="hud-stat"><small>Time</small><b id="h-time">00:00</b></div>
+      <div class="hud-btns"><button class="btn small" id="h-restart" type="button">Restart</button><button class="btn small" id="h-pause" type="button">Pause</button></div>
+    </div>
+    <div class="stage">
+      <div class="view"><canvas id="cv" width="1152" height="640" role="img" aria-label="The room. Move with W A S D and press Space to lift or place blocks."></canvas></div>
+      <aside class="side" aria-label="Clues">
+        <div class="panel cluebox"><h2>Pedestal clues <small id="clue-count"></small></h2><ol id="clues"></ol></div>
+      </aside>
+    </div>
+    <div class="under">
+      <div class="panel ins" id="inspector" aria-live="polite"></div>
+      <div class="feed info" id="feed" role="status" aria-live="polite"><span id="feed-tag">Tip</span><span id="feed-msg"></span></div>
+    </div>
+    <div class="keybar"><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk</span><span><kbd>Space</kbd> lift or place</span><span><kbd>R</kbd> restart</span><span><kbd>Esc</kbd> pause</span><span><kbd>M</kbd> mute</span></div>
+    <div class="pad" aria-label="Touch controls"><button id="tp-up" type="button" aria-label="Walk up">W</button><button id="tp-left" type="button" aria-label="Walk left">A</button><button id="tp-down" type="button" aria-label="Walk down">S</button><button id="tp-right" type="button" aria-label="Walk right">D</button><button id="tp-act" type="button" aria-label="Lift or place">Space</button></div>
+  </section>
+</main>
+
+<div class="hovertip" id="tip" role="tooltip" hidden></div>
+
+<!-- OVERLAYS -->
+<div class="ov" id="ov-brief" role="dialog" aria-modal="true" aria-labelledby="b-name" hidden>
+  <div class="panel dlg">
+    <div class="row"><span id="b-room"></span><span class="chip" id="b-topic"></span><span class="chip hl" id="b-hl" hidden>HL</span><span id="b-depth"></span></div>
+    <h2 id="b-name"></h2>
+    <p id="b-text"></p>
+    <p class="dim">The clues are in the panel beside the room. Wrong blocks float back to where they started.</p>
+    <p id="b-best" class="row"></p>
+    <div class="actions"><button class="btn primary" id="b-go" type="button" data-focus>Enter the room</button><button class="btn" id="b-back" type="button">Back to room select</button></div>
+  </div>
+</div>
+
+<div class="ov" id="ov-pause" role="dialog" aria-modal="true" aria-labelledby="p-h" hidden>
+  <div class="panel dlg">
+    <h2 id="p-h">Paused</h2>
+    <div class="actions">
+      <button class="btn primary" id="p-resume" type="button" data-focus>Resume</button>
+      <button class="btn" id="p-restart" type="button">Restart room</button>
+      <button class="btn" id="p-settings" type="button">Settings</button>
+      <button class="btn" id="p-select" type="button">Select room</button>
+      <button class="btn" id="p-title" type="button">Main menu</button>
+    </div>
+  </div>
+</div>
+
+<div class="ov" id="ov-done" role="dialog" aria-modal="true" aria-labelledby="d-h" hidden>
+  <div class="panel dlg">
+    <h2 id="d-h">Hatch open. Room cleared.</h2>
+    <div class="row big-stars" id="d-stars"></div>
+    <p><b id="d-name"></b></p>
+    <div class="statrow" id="d-stats"></div>
+    <p class="tip"><b>Exam tip.</b> <span id="d-tip"></span></p>
+    <div class="actions"><button class="btn primary" id="d-next" type="button" data-focus>Next room</button><button class="btn" id="d-again" type="button">Play this room again</button><button class="btn" id="d-select" type="button">Select room</button></div>
+  </div>
+</div>
+
+<div class="ov" id="ov-final" role="dialog" aria-modal="true" aria-labelledby="f-h" hidden>
+  <div class="panel dlg">
+    <h2 id="f-h">You reached the trench floor</h2>
+    <p>Every room in topics 4.1 and 4.2 is cleared. Replay rooms for three stars, or read back through the notes you collected.</p>
+    <div class="statrow" id="f-stats"></div>
+    <div class="actions"><button class="btn primary" id="f-notes" type="button" data-focus>Open study notes</button><button class="btn" id="f-select" type="button">Select room</button><button class="btn" id="f-title" type="button">Main menu</button></div>
+  </div>
+</div>
+
+<script>
+/* ===================== LEVEL DATA ===================== */
+const COLS = 18, ROWS = 10, TS = 64;
+
+function buildRows(layout) {
+  const g = Array.from({ length: ROWS }, (_, y) =>
+    Array.from({ length: COLS }, (_, x) => (x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1) ? '#' : '.'));
+  const api = {
+    set(ch, x, y) { g[y][x] = ch; },
+    many(ch, pts) { pts.forEach(([x, y]) => { g[y][x] = ch; }); },
+    rect(ch, x1, y1, x2, y2) { for (let y = y1; y <= y2; y++) for (let x = x1; x <= x2; x++) g[y][x] = ch; },
+    blocks(map) { Object.entries(map).forEach(([k, [x, y]]) => { g[y][x] = k; }); },
+    slots(map) { Object.entries(map).forEach(([k, pts]) => { (Array.isArray(pts[0]) ? pts : [pts]).forEach(([x, y]) => { g[y][x] = k; }); }); }
+  };
+  layout(api);
+  return g.map(r => r.join(''));
+}
+
+const TOPIC_NAMES = {
+  '4.1.1': 'Market orientation vs product orientation',
+  '4.1.2': 'Market share',
+  '4.1.3': 'Market growth',
+  '4.1.4': 'The importance of market share and market leadership (HL)',
+  '4.2.1': 'The role of marketing planning',
+  '4.2.2': 'Segmentation, targeting and positioning',
+  '4.2.3': 'Niche market vs mass market',
+  '4.2.4 · 4.2.5': 'Unique selling point and differentiation'
+};
+
+const LEVELS = [
+  /* ---------- 1 ---------- */
+  {
+    id: 'dock', name: 'Docking Bay', topic: '4.1.1', depth: 40, hl: false,
+    brief: 'Match each key term to its clue. Face a block, press SPACE to lift it, then face a pedestal and press SPACE to place it.',
+    tip: 'In a define question, one precise sentence is enough. Name what the business starts from: the customer or the product.',
+    layout(g) {
+      g.set('P', 2, 7); g.set('X', 16, 8);
+      g.slots({ '1': [3, 1], '2': [7, 1], '3': [11, 1], '4': [15, 1] });
+      g.blocks({ a: [4, 4], b: [9, 5], c: [13, 4], d: [6, 7], e: [12, 7] });
+      g.many('%', [[1, 1], [16, 1]]); g.many('&', [[1, 3], [1, 4]]); g.many('*', [[16, 4], [16, 5]]);
+      g.set('!', 9, 3); g.set('@', 9, 1);
+    },
+    slots: {
+      '1': { clue: 'Starts with customer needs and uses market research to decide what to make.', hint: 'Which approach begins with research into what customers want?' },
+      '2': { clue: 'Starts with what the firm is good at making: quality, technical features, innovation.', hint: 'Which approach begins with what the firm can make best?' },
+      '3': { clue: 'The business function that identifies, anticipates and satisfies customer needs profitably.', hint: 'Think of the whole business function, not one activity such as advertising.' },
+      '4': { clue: 'Any place where buyers and sellers meet to carry out transactions.', hint: 'Where do buyers and sellers meet?' }
+    },
+    blocks: {
+      a: { label: 'MARKET\nLED', text: 'Market orientation', to: '1', why: 'Market orientation starts with customer needs and market research. The product and marketing mix are then built to fit what customers want.' },
+      b: { label: 'PRODUCT\nLED', text: 'Product orientation', to: '2', why: 'Product orientation starts with the product: its quality, technical features or innovation. The business then looks for customers.' },
+      c: { label: 'MARKET-\nING', text: 'Marketing', to: '3', why: 'Marketing identifies, anticipates and satisfies customer needs profitably. It is much more than advertising.' },
+      d: { label: 'MARKET', text: 'Market', to: '4', why: 'A market is where buyers and sellers meet to carry out transactions. It can be a physical place or online.' },
+      e: { label: 'MARKET\nSHARE', text: 'Market share', to: null, miss: 'Market share is a percentage of total market sales. It is not one of these four definitions. Keep it for Room 3.' }
+    }
+  },
+  /* ---------- 2 ---------- */
+  {
+    id: 'sort1', name: 'Orientation Locks', topic: '4.1.1', depth: 120, hl: false,
+    brief: 'Two sealed zones. Sort every statement into the approach it describes.',
+    tip: 'Neither approach is always better. Say which suits the context, such as fast-changing consumer goods or specialist luxury products.',
+    layout(g) {
+      g.set('P', 8, 8); g.set('X', 16, 8);
+      g.slots({ '1': [[2, 1], [3, 1], [4, 1]], '2': [[13, 1], [14, 1], [15, 1]] });
+      g.blocks({ a: [5, 4], b: [8, 5], c: [3, 7], d: [12, 4], e: [10, 7], f: [14, 6] });
+      g.many('%', [[8, 1], [9, 1], [8, 2]]); g.set('&', 6, 2); g.set('*', 16, 3); g.set('!', 1, 5);
+    },
+    slots: {
+      '1': { title: 'MARKET-ORIENTED', clue: 'Drop every block that describes a market-oriented business.', hint: 'Market-oriented firms start from customers and research.' },
+      '2': { title: 'PRODUCT-ORIENTED', clue: 'Drop every block that describes a product-oriented business.', hint: 'Product-oriented firms start from the product and their own expertise.' }
+    },
+    blocks: {
+      a: { label: 'SURVEYS\nFIRST', text: 'Surveys customers before designing the product.', to: '1', why: 'Market-oriented firms use research to find out what customers want before they design anything.' },
+      b: { label: 'ADAPTS\nRANGE', text: 'Changes its product range as customer tastes change.', to: '1', why: 'Responding to changing preferences is typical of a market-oriented business.' },
+      c: { label: 'FAST\nMARKETS', text: 'Often best suited to fast-changing, competitive markets such as fast-moving consumer goods.', to: '1', why: 'Where tastes change quickly, a market-led approach helps a firm keep up with rivals.' },
+      d: { label: 'R&D\nLED', text: 'Decisions are driven by research and development and technical expertise.', to: '2', why: 'Product orientation leans on R&D, technical skill and innovation.' },
+      e: { label: 'BUILD\nFIRST', text: 'Creates the product first, then looks for buyers.', to: '2', why: 'Making the product first and finding a market later is the classic product-oriented route.' },
+      f: { label: 'LUXURY\nCRAFT', text: 'Often suits specialist, luxury or scientific products where expertise matters most.', to: '2', why: 'When quality and expertise are the main selling points, a product-led approach can work well.' }
+    }
+  },
+  /* ---------- 3 ---------- */
+  {
+    id: 'share', name: 'Share Calculator', topic: '4.1.2', depth: 220, hl: false,
+    brief: 'Four pedestals, eight blocks. Some answers are traps: wrong blocks float back to where they started.',
+    tip: 'Write the formula, show your working and finish with a % sign.',
+    layout(g) {
+      g.set('P', 2, 2); g.set('X', 16, 1);
+      g.slots({ '1': [3, 8], '2': [7, 8], '3': [11, 8], '4': [15, 8] });
+      g.blocks({ a: [4, 2], b: [8, 2], c: [14, 3], d: [3, 5], e: [9, 5], f: [15, 5], g: [7, 6], h: [13, 6] });
+      g.many('%', [[5, 4], [5, 5], [12, 4], [12, 5]]); g.many('@', [[1, 8], [17 - 1, 6]]); g.set('!', 10, 3);
+    },
+    slots: {
+      '1': { clue: 'Sales of $250,000 in a market worth $1,000,000. What is the market share?', hint: 'Divide firm sales by total market sales, then multiply by 100.' },
+      '2': { clue: 'A firm sells 45,000 units in a market of 300,000 units. What is its market share?', hint: 'The formula works with volumes too: 45,000 out of 300,000.' },
+      '3': { clue: 'A firm earns $6.0m in a market worth $80m. What is its market share?', hint: 'Keep both figures in the same units, then divide.' },
+      '4': { clue: 'Which calculation gives market share?', hint: 'The firm goes on top. The whole market goes underneath.' }
+    },
+    blocks: {
+      a: { label: '25%', text: '25%', to: '1', why: '$250,000 ÷ $1,000,000 × 100 = 25%.' },
+      b: { label: '15%', text: '15%', to: '2', why: '45,000 ÷ 300,000 × 100 = 15%.' },
+      c: { label: '7.5%', text: '7.5%', to: '3', why: '$6.0m ÷ $80m × 100 = 7.5%.' },
+      d: { label: 'FIRM ÷\nMARKET', text: 'Firm sales ÷ total market sales × 100', to: '4', why: 'Market share (%) = firm sales ÷ total market sales × 100. Show the formula and write the % sign.' },
+      e: { label: '75%', text: '75%', to: null, miss: '75% is what everyone else holds when a firm has 25%. Market share is the firm’s own slice.' },
+      f: { label: '400%', text: '400%', to: null, miss: 'That comes from flipping the formula upside down. A market share can never top 100%.' },
+      g: { label: '2.5%', text: '2.5%', to: null, miss: 'Check the decimal point. Divide, then multiply by 100.' },
+      h: { label: 'MARKET\n÷ FIRM', text: 'Total market sales ÷ firm sales × 100', to: null, miss: 'That one is upside down. The firm’s sales are the top line, market sales the bottom line.' }
+    }
+  },
+  /* ---------- 4 ---------- */
+  {
+    id: 'growth', name: 'Tide Gauge', topic: '4.1.3', depth: 380, hl: false,
+    brief: 'Market growth can be negative. Watch what you divide by.',
+    tip: 'Divide the change by the old size. A negative result means the market is contracting. Do not mix up market growth and sales growth.',
+    layout(g) {
+      g.set('P', 8, 8); g.set('X', 16, 1);
+      g.slots({ '1': [1, 2], '2': [1, 4], '3': [1, 6], '4': [1, 8] });
+      g.blocks({ a: [5, 2], b: [8, 3], c: [12, 2], d: [15, 3], e: [6, 5], f: [10, 6], g: [14, 6], h: [5, 8] });
+      g.many('#', [[4, 4], [4, 5], [4, 6]]); g.many('%', [[9, 5], [9, 6]]); g.set('&', 13, 8); g.set('!', 16, 5);
+    },
+    slots: {
+      '1': { clue: 'A market grew from $800m to $920m. What is the market growth?', hint: 'Divide the change by the OLD size, then multiply by 100.' },
+      '2': { clue: 'A market shrank from 1.2m units to 1.08m units. What is the market growth?', hint: 'A shrinking market gives a negative answer.' },
+      '3': { clue: 'A market grew from $50m to $65m. What is the market growth?', hint: 'Change ÷ old size × 100.' },
+      '4': { clue: 'Your sales rise 5% while the market grows 12%. What happens to your market share?', hint: 'Compare your growth with the market’s growth.' }
+    },
+    blocks: {
+      a: { label: '15%', text: '15%', to: '1', why: '($920m − $800m) ÷ $800m × 100 = 15%.' },
+      b: { label: '-10%', text: '-10%', to: '2', why: '(1.08m − 1.2m) ÷ 1.2m × 100 = −10%. A negative figure means the market is contracting.' },
+      c: { label: '30%', text: '30%', to: '3', why: '($65m − $50m) ÷ $50m × 100 = 30%.' },
+      d: { label: 'SHARE\nFALLS', text: 'Your market share falls.', to: '4', why: 'Your sales grew more slowly than the market, so your slice of the market shrinks even though sales are rising.' },
+      e: { label: '13%', text: '13%', to: null, miss: 'That divides by the NEW market size. Always divide the change by the OLD size.' },
+      f: { label: '23%', text: '23%', to: null, miss: 'Check what you divided by. The old market size goes on the bottom.' },
+      g: { label: '+10%', text: '+10%', to: null, miss: 'A shrinking market has negative growth. Watch the sign.' },
+      h: { label: 'SHARE\nRISES', text: 'Your market share rises.', to: null, miss: 'Your sales are growing more slowly than the market here, so the share cannot rise.' }
+    }
+  },
+  /* ---------- 5 (HL) ---------- */
+  {
+    id: 'vault', name: 'Leadership Vault', topic: '4.1.4', depth: 560, hl: true,
+    brief: 'Higher level. Sort the benefits of market leadership from the reasons share is not everything.',
+    tip: 'HL evaluation: judge how much market share matters by linking it to the firm’s objectives, then back the judgement with data from the case.',
+    layout(g) {
+      g.set('P', 8, 8); g.set('X', 8, 1);
+      g.slots({ '1': [[2, 1], [3, 1], [4, 1], [5, 1]], '2': [[12, 1], [13, 1], [14, 1], [15, 1]] });
+      g.rect('#', 1, 5, 7, 5); g.rect('#', 10, 5, 16, 5);
+      g.blocks({ a: [3, 3], b: [6, 3], c: [11, 3], d: [14, 3], e: [3, 7], f: [6, 6], g: [12, 6], h: [15, 7] });
+      g.many('*', [[1, 2], [16, 2]]); g.many('!', [[8, 3], [9, 3]]);
+    },
+    slots: {
+      '1': { title: 'LEADERSHIP HELPS', clue: 'Drop the benefits a market leader can enjoy.', hint: 'Think about size: costs, bargaining, recognition and influence.' },
+      '2': { title: 'SHARE IS NOT EVERYTHING', clue: 'Drop the limits and cautions about chasing market share.', hint: 'These are reasons a big share may not mean success.' }
+    },
+    blocks: {
+      a: { label: 'SCALE\nSAVINGS', text: 'Large sales volumes can lower the cost of each unit.', to: '1', why: 'Higher volumes spread fixed costs, so unit costs can fall. That supports lower prices or higher margins.' },
+      b: { label: 'BARGAIN\nPOWER', text: 'A big seller can negotiate better terms with suppliers and retailers.', to: '1', why: 'A large share gives bargaining power over suppliers and distributors.' },
+      c: { label: 'BRAND\nPULL', text: 'A leading brand is well known and trusted, so customers choose it more readily.', to: '1', why: 'Market leaders often enjoy stronger brand recognition and customer loyalty.' },
+      d: { label: 'SETS\nPACE', text: 'The leader has more influence over prices and over what rivals do next.', to: '1', why: 'Leaders can influence trends and pricing, and rivals often follow.' },
+      e: { label: 'PROFIT\nUNKNOWN', text: 'Market share alone does not show how profitable a firm is.', to: '2', why: 'A large share can still come with low margins, so share is only one indicator of success.' },
+      f: { label: 'NICHE\nGOALS', text: 'A firm focused on prestige, profit or a niche may not want the biggest share.', to: '2', why: 'Importance depends on objectives. Not every firm is trying to be the market leader.' },
+      g: { label: 'PRICE\nTRAP', text: 'Chasing share with deep price cuts can squeeze profit margins.', to: '2', why: 'Buying market share with very low prices can erode profit.' },
+      h: { label: 'NOT\nSECURE', text: 'Leadership does not guarantee long-term success. Leaders can be overtaken.', to: '2', why: 'Markets change, and leaders can lose position to innovative rivals.' }
+    }
+  },
+  /* ---------- 6 ---------- */
+  {
+    id: 'plan', name: 'Planning Room', topic: '4.2.1', depth: 800, hl: false,
+    brief: 'Five pedestals line the walls. Two blocks are decoys.',
+    tip: 'Link the plan to the business objectives, then show how the marketing mix puts the strategy into action.',
+    layout(g) {
+      g.set('P', 2, 4); g.set('X', 16, 1);
+      g.slots({ '1': [1, 2], '2': [1, 5], '3': [1, 8], '4': [16, 3], '5': [16, 7] });
+      g.blocks({ a: [4, 3], b: [7, 2], c: [11, 4], d: [13, 2], e: [5, 6], f: [9, 7], g: [13, 6] });
+      g.many('@', [[8, 4], [9, 4]]); g.many('%', [[6, 8], [16, 5]]); g.set('!', 3, 7);
+    },
+    slots: {
+      '1': { clue: 'The structured process of setting marketing objectives and choosing strategies to achieve them.', hint: 'It is a process of planning, not a single goal or action.' },
+      '2': { clue: 'A measurable target, such as raising market share by 5% within two years.', hint: 'It is the “what” the plan wants to achieve.' },
+      '3': { clue: 'The overall approach chosen to achieve the marketing objectives.', hint: 'It is the “how” at the big-picture level.' },
+      '4': { clue: 'Product, price, promotion and place.', hint: 'Four Ps: the tools the plan uses.' },
+      '5': { clue: 'Marketing objectives should support these wider goals of the whole organisation.', hint: 'What must marketing contribute to?' }
+    },
+    blocks: {
+      a: { label: 'PLAN-\nNING', text: 'Marketing planning', to: '1', why: 'Marketing planning is the structured process of setting marketing objectives and deciding the strategies to achieve them.' },
+      b: { label: 'OBJECT-\nIVE', text: 'Marketing objective', to: '2', why: 'Marketing objectives are specific, measurable targets, such as a market share or sales growth goal.' },
+      c: { label: 'STRAT-\nEGY', text: 'Marketing strategy', to: '3', why: 'A marketing strategy is the overall approach used to reach the marketing objectives.' },
+      d: { label: 'MIX OF\n4 Ps', text: 'Marketing mix', to: '4', why: 'The marketing mix combines product, price, promotion and place to put the strategy into action.' },
+      e: { label: 'COMPANY\nGOALS', text: 'Business objectives', to: '5', why: 'Marketing objectives should support the overall business objectives so every function pulls in the same direction.' },
+      f: { label: 'RE-\nSEARCH', text: 'Market research', to: null, miss: 'Market research gathers information that feeds the plan. It is not the plan, the goal or the strategy.' },
+      g: { label: 'SEG-\nMENT-\nATION', text: 'Segmentation', to: null, miss: 'Segmentation is one step inside planning. It does not fit any of these clues.' }
+    }
+  },
+  /* ---------- 7 ---------- */
+  {
+    id: 'gallery', name: 'Segment Gallery', topic: '4.2.2', depth: 1100, hl: false,
+    brief: 'Five portrait frames hang on the wall. Each shows a way of splitting a market.',
+    tip: 'Name the base (demographic, geographic, psychographic or behavioural) and give an example from the case.',
+    layout(g) {
+      g.set('P', 2, 8); g.set('X', 16, 8);
+      g.slots({ '1': [3, 1], '2': [6, 1], '3': [9, 1], '4': [12, 1], '5': [15, 1] });
+      g.blocks({ a: [3, 5], b: [6, 5], c: [9, 5], d: [12, 5], e: [15, 5], f: [5, 7], g: [11, 7] });
+      g.many('%', [[4, 3], [8, 3], [14, 3]]); g.many('!', [[1, 3], [16, 3]]);
+    },
+    slots: {
+      '1': { clue: 'Splitting customers by age, gender, income or occupation.', hint: 'Think about who customers are, as facts on paper.' },
+      '2': { clue: 'Splitting customers by region, climate or urban versus rural location.', hint: 'It is about where customers live.' },
+      '3': { clue: 'Splitting customers by lifestyle, values, interests or personality.', hint: 'It is about what customers think and enjoy.' },
+      '4': { clue: 'Splitting customers by how they act: how often they buy, loyalty or the benefits they seek.', hint: 'It is about what customers do.' },
+      '5': { clue: 'Dividing a market into groups of customers with similar needs.', hint: 'It is the first step before choosing a target market.' }
+    },
+    blocks: {
+      a: { label: 'DEMO-\nGRAPHIC', text: 'Demographic', to: '1', why: 'Demographic segmentation uses measurable traits such as age, gender, income and occupation.' },
+      b: { label: 'GEO-\nGRAPHIC', text: 'Geographic', to: '2', why: 'Geographic segmentation groups customers by location, climate or whether they live in cities or the countryside.' },
+      c: { label: 'PSYCHO-\nGRAPHIC', text: 'Psychographic', to: '3', why: 'Psychographic segmentation groups customers by lifestyle, values, attitudes and personality.' },
+      d: { label: 'BEHAV-\nIOURAL', text: 'Behavioural', to: '4', why: 'Behavioural segmentation groups customers by usage rate, brand loyalty or the benefits they look for.' },
+      e: { label: 'SEG-\nMENT-\nATION', text: 'Segmentation', to: '5', why: 'Segmentation divides a market into groups with similar needs so a business can serve one group well.' },
+      f: { label: 'TARGET-\nING', text: 'Targeting', to: null, miss: 'Targeting comes after segmentation. It is choosing which segments to serve.' },
+      g: { label: 'NICHE\nMARKET', text: 'Niche market', to: null, miss: 'A niche market is one narrow target group, not a way of splitting a market.' }
+    }
+  },
+  /* ---------- 8 ---------- */
+  {
+    id: 'stp', name: 'Conveyor Line', topic: '4.2.2', depth: 1600, hl: false,
+    brief: 'A bike maker works through segmenting, targeting and positioning. Put each step on its station.',
+    tip: 'Keep the order: segment, target, position. Justify the target market with market size, income, preferences and competition.',
+    layout(g) {
+      g.set('P', 2, 6); g.set('X', 16, 1);
+      g.rect(',', 1, 4, 16, 5);
+      g.slots({ '1': [4, 8], '2': [7, 8], '3': [10, 8], '4': [13, 8] });
+      g.many('#', [[5, 6], [5, 7], [8, 6], [8, 7], [11, 6], [11, 7]]);
+      g.blocks({ a: [3, 2], b: [8, 2], c: [13, 2], d: [6, 5], e: [12, 4], f: [15, 3] });
+      g.many('%', [[1, 8], [16, 8]]); g.set('!', 10, 2);
+    },
+    slots: {
+      '1': { clue: 'Cogwheel Cycles sorts its buyers into commuters, racers and families.', hint: 'The market is being divided into groups.' },
+      '2': { clue: 'It decides to serve commuters only.', hint: 'It is choosing which group to aim at.' },
+      '3': { clue: 'Its ads say it is the most reliable city bike, unlike its rivals.', hint: 'It is creating a distinct image in customers’ minds.' },
+      '4': { clue: 'It sets price, stores, packaging and ads to match that image.', hint: 'Product, price, promotion, place.' }
+    },
+    blocks: {
+      a: { label: 'SEG-\nMENT-\nATION', text: 'Segmentation', to: '1', why: 'Segmentation: the market is divided into groups (commuters, racers, families) with similar needs.' },
+      b: { label: 'TARGET-\nING', text: 'Targeting', to: '2', why: 'Targeting: the firm selects the segment it will serve, here commuters. That is its target market.' },
+      c: { label: 'POSI-\nTION-\nING', text: 'Positioning', to: '3', why: 'Positioning: the firm builds a distinct image in the minds of its target customers, relative to competitors.' },
+      d: { label: 'MIX OF\n4 Ps', text: 'Marketing mix', to: '4', why: 'The marketing mix is then built around the chosen target market and position.' },
+      e: { label: 'MASS\nMARKET', text: 'Mass market', to: null, miss: 'Cogwheel is aiming at one group, so a mass market does not fit.' },
+      f: { label: 'MARKET\nGROWTH', text: 'Market growth', to: null, miss: 'Market growth measures how fast a market’s size changes. It is not a step in this process.' }
+    }
+  },
+  /* ---------- 9 ---------- */
+  {
+    id: 'posmap', name: 'Position Map', topic: '4.2.2', depth: 2300, hl: false, overlay: 'posmap',
+    brief: 'The floor is a position map. Price runs left to right, quality runs bottom to top.',
+    tip: 'When reading a position map, look for clusters of rivals and gaps in the market, and remember it shows customer perceptions.',
+    layout(g) {
+      g.set('P', 9, 4); g.set('X', 1, 1);
+      g.slots({ '1': [4, 2], '2': [13, 2], '3': [4, 7], '4': [13, 7], '5': [16, 5] });
+      g.blocks({ a: [2, 3], b: [8, 2], c: [11, 4], d: [7, 6], e: [15, 3], f: [10, 7], g: [2, 8] });
+      g.many('%', [[16, 8], [1, 5]]);
+    },
+    slots: {
+      '1': { clue: 'TOP LEFT of the map: HIGH quality, LOW price.', hint: 'Price runs left (low) to right (high). Quality runs bottom (low) to top (high).' },
+      '2': { clue: 'TOP RIGHT of the map: HIGH quality, HIGH price.', hint: 'Price runs left (low) to right (high). Quality runs bottom (low) to top (high).' },
+      '3': { clue: 'BOTTOM LEFT of the map: LOW quality, LOW price.', hint: 'Price runs left (low) to right (high). Quality runs bottom (low) to top (high).' },
+      '4': { clue: 'BOTTOM RIGHT of the map: LOW quality, HIGH price.', hint: 'Price runs left (low) to right (high). Quality runs bottom (low) to top (high).' },
+      '5': { clue: 'A position map plots how customers see competing brands on two attributes. It shows their ______.', hint: 'It is about what is in customers’ minds.' }
+    },
+    blocks: {
+      a: { label: 'LUXE\nLATTE', text: 'Luxe Latte: single-origin beans, marble counters and top-of-market prices.', to: '2', why: 'High quality and high price puts Luxe Latte top right: a premium position.' },
+      b: { label: 'PENNY\nPOT', text: 'Penny Pot: basic instant coffee in paper cups at the lowest prices in town.', to: '3', why: 'Low quality and low price puts Penny Pot bottom left: a budget position.' },
+      c: { label: 'BEAN\nBARGAIN', text: 'Bean Bargain: fresh-roasted, well-reviewed coffee at below-average prices.', to: '1', why: 'High quality at a low price puts Bean Bargain top left: a strong value position.' },
+      d: { label: 'GLITZ\nGRIND', text: 'Glitz Grind: flashy branding, weak coffee and premium prices.', to: '4', why: 'Low quality at a high price puts Glitz Grind bottom right: customers may feel it is overpriced.' },
+      e: { label: 'MID\nMUG', text: 'Mid Mug: average price and average quality.', to: null, miss: 'Mid Mug sits near the centre of the map. No corner fits it.' },
+      f: { label: 'PERCEP-\nTIONS', text: 'Perceptions', to: '5', why: 'A position map shows how customers perceive brands on two attributes such as price and quality. Gaps can point to opportunities.' },
+      g: { label: 'COSTS', text: 'Costs', to: null, miss: 'Position maps show customer perceptions, not a firm’s costs.' }
+    }
+  },
+  /* ---------- 10 ---------- */
+  {
+    id: 'sort2', name: 'Niche or Mass', topic: '4.2.3', depth: 3100, hl: false,
+    brief: 'Two zones on opposite walls. Sort every statement.',
+    tip: 'Small firms often start in a niche because they lack the resources for a mass market. Weigh premium prices against limited sales.',
+    layout(g) {
+      g.set('P', 2, 5); g.set('X', 16, 1);
+      g.slots({ '1': [[2, 1], [3, 1], [4, 1], [5, 1]], '2': [[12, 8], [13, 8], [14, 8], [15, 8]] });
+      g.blocks({ a: [3, 4], b: [7, 3], c: [9, 5], d: [12, 3], e: [14, 5], f: [4, 7], g: [8, 7], h: [11, 6] });
+      g.many('%', [[7, 1], [8, 1]]); g.set('&', 10, 2); g.many('*', [[1, 8], [16, 8]]);
+    },
+    slots: {
+      '1': { title: 'NICHE MARKET', clue: 'Drop every block that describes targeting a niche market.', hint: 'Niche means a small, very specific group of customers.' },
+      '2': { title: 'MASS MARKET', clue: 'Drop every block that describes targeting a mass market.', hint: 'Mass means a very broad group of customers.' }
+    },
+    blocks: {
+      a: { label: 'TINY\nGROUP', text: 'Aims at a very specific group of customers.', to: '1', why: 'A niche market is a narrow, specialised group of potential customers.' },
+      b: { label: 'PREMIUM\nPRICES', text: 'Fewer rivals and loyal buyers can allow higher prices.', to: '1', why: 'With less competition and committed customers, niche firms may be able to charge premium prices.' },
+      c: { label: 'CAPPED\nSALES', text: 'Sales potential is limited by the small size of the segment.', to: '1', why: 'A small segment limits how much the firm can sell. That is a key risk of niche marketing.' },
+      d: { label: 'START-\nUP FIT', text: 'Suits a small start-up that cannot afford to compete everywhere.', to: '1', why: 'Small firms with limited resources often begin in a niche.' },
+      e: { label: 'EVERY-\nONE', text: 'Aims at a very broad group of customers.', to: '2', why: 'A mass market is a very broadly defined group of potential customers.' },
+      f: { label: 'LOWER\nCOSTS', text: 'Large volumes can lower the cost of each unit.', to: '2', why: 'Large-scale production and big orders can cut unit costs through economies of scale.' },
+      g: { label: 'RIVAL\nCROWD', text: 'Faces many competitors and strong pressure on prices.', to: '2', why: 'Big, attractive markets draw many rivals, which can squeeze prices and margins.' },
+      h: { label: 'BIG\nBUDGETS', text: 'Needs large promotion and distribution budgets to reach everyone.', to: '2', why: 'Reaching a broad audience takes heavy spending on promotion and distribution.' }
+    }
+  },
+  /* ---------- 11 ---------- */
+  {
+    id: 'edge', name: 'Edge Workshop', topic: '4.2.4 · 4.2.5', depth: 4200, hl: false,
+    brief: 'Six benches, eight blocks. Find what makes a product stand apart.',
+    tip: 'Explain how the USP supports branding, promotion and positioning, then link it to sales or loyalty.',
+    layout(g) {
+      g.set('P', 2, 5); g.set('X', 16, 5);
+      g.slots({ '1': [4, 1], '2': [8, 1], '3': [12, 1], '4': [4, 8], '5': [8, 8], '6': [12, 8] });
+      g.blocks({ a: [3, 3], b: [6, 4], c: [10, 3], d: [14, 4], e: [3, 6], f: [7, 6], g: [11, 6], h: [14, 7] });
+      g.many('@', [[8, 4], [9, 4]]); g.many('%', [[1, 1], [1, 8]]); g.set('!', 16, 3);
+    },
+    slots: {
+      '1': { clue: 'The one feature or benefit that makes customers choose this product over its rivals.', hint: 'Think “unique selling …”.' },
+      '2': { clue: 'The wider strategy of making a product distinct from competitors, through quality, design, branding or service.', hint: 'It is the strategy. The USP is its focal point.' },
+      '3': { clue: 'A phone maker is first to launch a feature no rival has yet.', hint: 'It is about being first with something new.' },
+      '4': { clue: 'A clothing label builds a distinctive logo and a recognisable image.', hint: 'Think of a name and a logo customers trust.' },
+      '5': { clue: 'A retailer wins loyalty with friendly, fast after-sales support.', hint: 'It is about how customers are treated.' },
+      '6': { clue: 'A café promises beans traceable to each farm, with growers paid fairly.', hint: 'It is about where and how the product is made.' }
+    },
+    blocks: {
+      a: { label: 'USP', text: 'Unique selling point (proposition)', to: '1', why: 'A unique selling point is the feature or benefit that makes a product stand out. It supports branding, promotion and positioning.' },
+      b: { label: 'DIFFER-\nENTI-\nATION', text: 'Differentiation', to: '2', why: 'Differentiation makes a product distinct from competitors, for example through quality, design, branding or service.' },
+      c: { label: 'INNO-\nVATION', text: 'Innovation', to: '3', why: 'Innovation can differentiate a product when it offers something rivals do not yet have.' },
+      d: { label: 'BRAND-\nING', text: 'Branding', to: '4', why: 'Branding differentiates through a recognisable name, logo and image that customers trust.' },
+      e: { label: 'SERVICE', text: 'Customer service', to: '5', why: 'Excellent customer service can differentiate a business when the products themselves are similar.' },
+      f: { label: 'ETHICAL\nSOURCE', text: 'Ethical sourcing', to: '6', why: 'Ethical sourcing can be a USP for customers who care about how products are made.' },
+      g: { label: 'MARKET\nSHARE', text: 'Market share', to: null, miss: 'Market share measures size in a market. It is not a way to stand apart.' },
+      h: { label: 'MASS\nMARKET', text: 'Mass market', to: null, miss: 'A mass market is a very broad target group. It is not a way to stand apart.' }
+    }
+  },
+  /* ---------- 12 ---------- */
+  {
+    id: 'final', name: 'The Trench', topic: '4.1 + 4.2', depth: 7000, hl: false, notes: false,
+    brief: 'Final chamber. Seven pedestals, eleven blocks, four decoys. Everything from 4.1 and 4.2 is in play.',
+    tip: 'Mixed practice: define, apply, calculate. Show formulas and use the case context in every answer.',
+    layout(g) {
+      g.set('P', 9, 6); g.set('X', 9, 8);
+      g.slots({ '1': [3, 1], '2': [6, 1], '3': [9, 1], '4': [12, 1], '5': [15, 1], '6': [1, 5], '7': [16, 5] });
+      g.blocks({ a: [3, 3], b: [5, 5], c: [8, 3], d: [10, 5], e: [13, 3], f: [15, 6], g: [3, 7], h: [6, 7], i: [12, 7], j: [14, 8], k: [7, 5] });
+      g.many('%', [[4, 4], [11, 4]]); g.many('!', [[1, 2], [16, 2]]); g.many('*', [[1, 8], [16, 8]]);
+    },
+    slots: {
+      '1': { clue: 'Sales of $9m in a market worth $60m. What is the market share?', hint: 'Firm sales ÷ total market sales × 100.' },
+      '2': { clue: 'A market grows from 400,000 to 500,000 units. What is the market growth?', hint: 'Divide the change by the OLD size.' },
+      '3': { clue: 'Starts from technical excellence rather than customer research.', hint: 'Which orientation begins with the product?' },
+      '4': { clue: 'Chooses which of the divided groups the business will serve.', hint: 'The step after segmentation.' },
+      '5': { clue: 'Shows how customers perceive rival brands on two attributes.', hint: 'The visual tool used for positioning.' },
+      '6': { clue: 'A very specific group of customers, often chosen by small firms.', hint: 'The opposite of a mass market.' },
+      '7': { clue: 'The feature that makes a product stand out from its rivals.', hint: 'Three letters.' }
+    },
+    blocks: {
+      a: { label: '15%', text: '15%', to: '1', why: '$9m ÷ $60m × 100 = 15%.' },
+      b: { label: '25%', text: '25%', to: '2', why: '(500,000 − 400,000) ÷ 400,000 × 100 = 25%.' },
+      c: { label: 'PRODUCT\nLED', text: 'Product orientation', to: '3', why: 'Product orientation starts from the product’s quality, features or innovation, not from customer research.' },
+      d: { label: 'TARGET-\nING', text: 'Targeting', to: '4', why: 'Targeting selects the segment or segments a business will serve.' },
+      e: { label: 'POSI-\nTION\nMAP', text: 'Position map', to: '5', why: 'A position map plots customer perceptions of competing brands on two attributes.' },
+      f: { label: 'NICHE\nMARKET', text: 'Niche market', to: '6', why: 'A niche market is a very specific group of customers, often a good starting point for small firms.' },
+      g: { label: 'USP', text: 'Unique selling point (proposition)', to: '7', why: 'A USP is the feature or benefit that makes a product stand out from competitors.' },
+      h: { label: '85%', text: '85%', to: null, miss: 'That is everyone else’s share (100% − 15%). Market share is the firm’s own slice.' },
+      i: { label: '20%', text: '20%', to: null, miss: 'That divides by the NEW market size. Use the old size.' },
+      j: { label: 'MARKET\nLED', text: 'Market orientation', to: null, miss: 'Market orientation starts from customers. The clue starts from the product.' },
+      k: { label: 'MASS\nMARKET', text: 'Mass market', to: null, miss: 'A mass market is the opposite of a very specific group.' }
+    }
+  }
+];
+
+/* ===================== ENGINE ===================== */
+const W = COLS * TS, H = ROWS * TS;
+const VIEW = { k: 0.75 }; /* backing-store pixels per world pixel, set by fitCanvas() */
+const HEAD_FONT = '"Press Start 2P", "Courier New", monospace';
+const BODY_FONT = '"Pixelify Sans", "Courier New", monospace';
+const SLOT_COLORS = ['#3ee6d0', '#ff6f7d', '#ffcf5c', '#6be38a', '#b794ff', '#ff8a3d', '#7cc4ff', '#ff9be1', '#c7f06b'];
+const PAL = {
+  x: '#071423', w: '#e8f7ff', g: '#9db7cc', G: '#5b7b97', d: '#2a4560', D: '#16283e', e: '#0e1c30',
+  f: '#173250', F: '#22446a', c: '#3ee6d0', C: '#18a395', y: '#ffcf5c', Y: '#c48a22', o: '#ff8a3d', O: '#c4561c',
+  r: '#ff6f7d', R: '#b3354a', k: '#6be38a', K: '#2e9a55', n: '#8a5a32', N: '#52331b', v: '#0a3548', h: '#9ff4ff', B: '#243447'
+};
+const DIRS = [[0, 1], [0, -1], [-1, 0], [1, 0]]; // down, up, left, right
+const MOVE_S = 0.15, TURN_S = 0.1;
+
+/* ---------- sprite helpers ---------- */
+function mk(w, h, fn) { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.imageSmoothingEnabled = false; fn(x); return c; }
+function px(x, c, a, b, w = 1, h = 1) { x.fillStyle = c; x.fillRect(a, b, w, h); }
+function drawRows(x, rs, pal) { rs.forEach((r, y) => { for (let i = 0; i < r.length; i++) { const ch = r[i]; if (ch !== '.') { x.fillStyle = pal[ch]; x.fillRect(i, y, 1, 1); } } }); }
+function shapes(x, list) { list.forEach(s => { if (s[5]) px(x, PAL.x, s[1] - 1, s[2] - 1, s[3] + 2, s[4] + 2); }); list.forEach(s => px(x, s[0], s[1], s[2], s[3], s[4])); }
+function rng(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function shade(hex, f) { const n = parseInt(hex.slice(1), 16); const r = Math.round(((n >> 16) & 255) * f), g = Math.round(((n >> 8) & 255) * f), b = Math.round((n & 255) * f); return '#' + [r, g, b].map(v => Math.min(255, v).toString(16).padStart(2, '0')).join(''); }
+
+const PED_ROWS = [
+  '................', '....xxxxxxxx....', '..xxccccccccxx..', '.xccDDDDDDDDccx.', '.xcDddddddddDcx.', 'xxcDdXXXXXXdDcxx',
+  'xcCDdXXXXXXdDCcx', 'xcCDdXXXXXXdDCcx', 'xcCDdXXXXXXdDCcx', 'xxcDdXXXXXXdDcxx', '.xcDddddddddDcx.', '.xccDDDDDDDDccx.',
+  '..xxCCCCCCCCxx..', '....xxxxxxxx....', '................', '................'
+];
+const CORAL_ROWS = [
+  '................', '...rr.......rr..', '..rRr...rr..rRr.', '..rRr..rRr..rRr.', '..rRrr.rRr.rrRr.', '...rRr.rRr.rRr..', '...rRrrrRrrrRr..',
+  '....rRrrRrrRr...', '....rRrrRrrRr...', '.....rRrRrRr....', '.....rRRRRRr....', '..K...rRRRr..K..', '.KkK..rRRRr.KkK.',
+  '.KkKKKKKKKKKKkK.', '..KKKnnnnnnKKK..', '...xnnNNNNnnx...'
+];
+const CRATE_ROWS = [
+  '................', '..xxxxxxxxxxxx..', '..xNnnnnnnnnNx..', '..xnNnnnnnnNnx..', '..xnnNnnnnNnnx..', '..xnnnNnnNnnnx..', '..xnnnnNNnnnnx..',
+  '..xnnnnNNnnnnx..', '..xnnnNnnNnnnx..', '..xnnNnnnnNnnx..', '..xnNnnnnnnNnx..', '..xNnnnnnnnnNx..', '..xxxxxxxxxxxx..',
+  '...xDDDDDDDDx...', '................', '................'
+];
+const PORTHOLE = ['..gggg..', '.gGGGGg.', 'gGvvvhGg', 'gGvvhvGg', 'gGvvvvGg', 'gGvvvvGg', '.gGGGGg.', '..gggg..'];
+
+const SPR = {};
+function buildSprites() {
+  SPR.floor = [0, 1, 2, 3].map(seed => mk(16, 16, x => {
+    const r = rng(seed * 977 + 13);
+    px(x, '#173250', 0, 0, 16, 16); px(x, '#22446a', 0, 0, 16, 1); px(x, '#22446a', 0, 0, 1, 16);
+    px(x, '#0e1c30', 0, 15, 16, 1); px(x, '#0e1c30', 15, 0, 1, 16);
+    [[2, 2], [13, 2], [2, 13], [13, 13]].forEach(([a, b]) => px(x, '#2e5a8a', a, b));
+    for (let i = 0; i < 6; i++) px(x, r() < .5 ? '#1d3d63' : '#122a45', 2 + Math.floor(r() * 12), 2 + Math.floor(r() * 12));
+  }));
+  SPR.grate = mk(16, 16, x => {
+    px(x, '#0a1626', 0, 0, 16, 16);
+    for (let y = 1; y < 16; y += 3) { px(x, '#1b3b5e', 1, y, 14, 1); px(x, '#102743', 1, y + 1, 14, 1); }
+    px(x, '#2e5a8a', 0, 0, 1, 16); px(x, '#2e5a8a', 15, 0, 1, 16);
+  });
+  SPR.wall = [0, 1].map(seed => mk(16, 16, x => {
+    px(x, PAL.d, 0, 0, 16, 16); px(x, '#6b8cab', 0, 0, 16, 1); px(x, '#3d5d7c', 0, 1, 16, 1);
+    px(x, PAL.e, 0, 7, 16, 1); px(x, PAL.D, 0, 12, 16, 3); px(x, PAL.x, 0, 15, 16, 1);
+    [[2, 3], [13, 3], [2, 10], [13, 10]].forEach(([a, b]) => px(x, PAL.g, a, b));
+    [[1, 5], [14, 5], [8, 13]].forEach(([a, b]) => px(x, PAL.G, a, b));
+  }));
+  SPR.porthole = mk(16, 16, x => {
+    px(x, PAL.d, 0, 0, 16, 16); px(x, '#6b8cab', 0, 0, 16, 1); px(x, '#3d5d7c', 0, 1, 16, 1); px(x, PAL.D, 0, 12, 16, 3); px(x, PAL.x, 0, 15, 16, 1);
+    const pal = { g: '#9db7cc', G: '#5b7b97', v: '#0a4a64', h: '#9ff4ff' };
+    x.save(); x.translate(4, 3); drawRows(x, PORTHOLE, pal); x.restore();
+  });
+  SPR.ped = {}; SPR.pedOk = null;
+  SPR.pedFor = (col) => SPR.ped[col] || (SPR.ped[col] = mk(16, 16, x => drawRows(x, PED_ROWS, { x: PAL.x, c: col, C: shade(col, .55), D: '#0c1b2e', d: '#1b3553', X: '#071423' })));
+  SPR.pedOk = SPR.pedFor('#6be38a');
+  const blk = (locked) => mk(16, 16, x => {
+    const face = locked ? '#1a5c3a' : PAL.d, hi = locked ? '#7be39a' : '#86a6c6', lo = locked ? '#0f3a26' : PAL.D, plate = locked ? '#0b2a1d' : '#08182b';
+    px(x, PAL.x, 0, 1, 16, 14); px(x, face, 1, 2, 14, 12);
+    px(x, hi, 1, 2, 14, 1); px(x, hi, 1, 2, 1, 12); px(x, lo, 1, 13, 14, 1); px(x, lo, 14, 2, 1, 12);
+    x.clearRect(0, 1, 1, 1); x.clearRect(15, 1, 1, 1); x.clearRect(0, 14, 1, 1); x.clearRect(15, 14, 1, 1);
+    px(x, plate, 2, 3, 12, 10);
+    [[1, 2], [14, 2], [1, 13], [14, 13]].forEach(([a, b]) => px(x, PAL.y, a, b));
+    px(x, 'rgba(0,0,0,.35)', 1, 15, 14, 1);
+  });
+  SPR.block = blk(false); SPR.blockOk = blk(true);
+  const hatch = (open) => mk(16, 16, x => {
+    px(x, PAL.x, 0, 0, 16, 16); px(x, '#3d5d7c', 1, 1, 14, 14); px(x, PAL.D, 2, 2, 12, 12);
+    px(x, open ? '#052a33' : '#070d18', 3, 3, 10, 10);
+    if (open) {
+      px(x, PAL.g, 5, 3, 1, 10); px(x, PAL.g, 10, 3, 1, 10); for (let y = 4; y < 13; y += 3) px(x, PAL.y, 6, y, 4, 1);
+      [[2, 2], [13, 2], [2, 13], [13, 13]].forEach(([a, b]) => px(x, PAL.k, a, b));
+    } else {
+      [4, 7, 10].forEach(a => px(x, PAL.G, a, 3, 1, 10)); px(x, PAL.G, 3, 7, 10, 1);
+      [[2, 2], [13, 2], [2, 13], [13, 13]].forEach(([a, b]) => px(x, PAL.r, a, b));
+    }
+  });
+  SPR.hatchC = hatch(false); SPR.hatchO = hatch(true);
+  SPR.coral = mk(16, 16, x => drawRows(x, CORAL_ROWS, PAL));
+  SPR.crate = mk(16, 16, x => drawRows(x, CRATE_ROWS, PAL));
+  SPR.barrel = mk(16, 16, x => { shapes(x, [[PAL.G, 3, 2, 10, 12, 1], [PAL.g, 4, 2, 8, 1], [PAL.C, 3, 5, 10, 1], [PAL.C, 3, 10, 10, 1], [PAL.y, 6, 7, 4, 2], [PAL.D, 3, 13, 10, 1]]); });
+  SPR.console = mk(16, 16, x => { shapes(x, [[PAL.D, 2, 4, 12, 9, 1], [PAL.v, 3, 5, 10, 5], [PAL.c, 4, 6, 6, 1], [PAL.c, 4, 8, 4, 1], [PAL.h, 11, 6, 1, 1], [PAL.d, 3, 11, 10, 1], [PAL.y, 4, 12, 1, 1], [PAL.r, 6, 12, 1, 1]]); });
+  SPR.lamp = mk(16, 16, x => { shapes(x, [[PAL.G, 7, 6, 2, 8, 1], [PAL.D, 5, 13, 6, 2, 1], [PAL.y, 5, 1, 6, 5, 1], [PAL.h, 7, 2, 2, 3]]); });
+  const diver = (dir, f) => mk(16, 16, x => {
+    const legL = f === 0 ? [5, 12, 3, 3] : [4, 12, 3, 3], legR = f === 0 ? [8, 12, 3, 3] : [9, 12, 3, 3];
+    if (dir === 0) shapes(x, [[PAL.O, ...legL, 1], [PAL.O, ...legR, 1], [PAL.B, legL[0], 14, 3, 1], [PAL.B, legR[0], 14, 3, 1],
+      [PAL.O, 2, 8, 2, 4, 1], [PAL.O, 12, 8, 2, 4, 1], [PAL.y, 2, 11, 2, 1], [PAL.y, 12, 11, 2, 1],
+      [PAL.o, 4, 7, 8, 5, 1], [PAL.O, 4, 11, 8, 1], [PAL.c, 7, 9, 2, 1],
+      [PAL.y, 4, 1, 8, 6, 1], [PAL.Y, 4, 6, 8, 1], [PAL.Y, 11, 2, 1, 4], [PAL.v, 5, 2, 6, 3], [PAL.h, 6, 3, 2, 1]]);
+    else if (dir === 1) shapes(x, [[PAL.O, ...legL, 1], [PAL.O, ...legR, 1], [PAL.B, legL[0], 14, 3, 1], [PAL.B, legR[0], 14, 3, 1],
+      [PAL.O, 2, 8, 2, 4, 1], [PAL.O, 12, 8, 2, 4, 1], [PAL.y, 2, 11, 2, 1], [PAL.y, 12, 11, 2, 1],
+      [PAL.o, 4, 7, 8, 5, 1], [PAL.G, 5, 7, 6, 5], [PAL.g, 6, 8, 1, 3], [PAL.D, 5, 11, 6, 1],
+      [PAL.y, 4, 1, 8, 6, 1], [PAL.Y, 4, 5, 8, 2], [PAL.Y, 4, 2, 1, 3]]);
+    else {
+      const a = f === 0 ? [6, 12, 2, 3] : [5, 12, 2, 3], b = f === 0 ? [8, 12, 2, 3] : [9, 12, 2, 3];
+      shapes(x, [[PAL.O, ...a, 1], [PAL.O, ...b, 1], [PAL.B, a[0], 14, 2, 1], [PAL.B, b[0], 14, 2, 1],
+        [PAL.G, 3, 7, 3, 5, 1], [PAL.g, 3, 8, 1, 3],
+        [PAL.o, 5, 7, 6, 5, 1], [PAL.O, 5, 11, 6, 1], [PAL.O, 7, 8, 3, 4], [PAL.y, 7, 11, 3, 1],
+        [PAL.y, 5, 1, 7, 6, 1], [PAL.Y, 5, 6, 7, 1], [PAL.v, 9, 2, 3, 3], [PAL.h, 10, 3, 1, 1]]);
+    }
+  });
+  const flip = (c) => mk(16, 16, x => { x.translate(16, 0); x.scale(-1, 1); x.drawImage(c, 0, 0); });
+  SPR.diver = [0, 1, 2, 3].map(() => [null, null]);
+  for (let d = 0; d < 4; d++) for (let f = 0; f < 2; f++) { SPR.diver[d][f] = d === 2 ? flip(diver(3, f)) : diver(d, f); }
+  SPR.vignette = mk(W / 4, H / 4, x => { const g = x.createRadialGradient(W / 8, H / 8, H / 12, W / 8, H / 8, W / 5.2); g.addColorStop(0, 'rgba(2,6,14,0)'); g.addColorStop(1, 'rgba(2,6,14,.62)'); x.fillStyle = g; x.fillRect(0, 0, W / 4, H / 4); });
+}
+
+/* ---------- audio ---------- */
+let AC = null;
+function audio() { if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = null; } } if (AC && AC.state === 'suspended') AC.resume(); return AC; }
+function tone(f, d, type = 'square', v = 0.05, slide = 0, delay = 0) {
+  if (!SET.sound) return; const a = audio(); if (!a) return;
+  const t = a.currentTime + delay, o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), t + d);
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + d + 0.03);
+}
+function sfx(n) {
+  switch (n) {
+    case 'click': tone(660, .05, 'square', .03); break;
+    case 'pick': tone(440, .09, 'triangle', .07, 260); break;
+    case 'drop': tone(300, .1, 'triangle', .07, -120); break;
+    case 'ok': [523, 659, 784, 1047].forEach((f, i) => tone(f, .14, 'triangle', .07, 0, i * .07)); break;
+    case 'wrong': tone(190, .28, 'sawtooth', .05, -100); tone(150, .22, 'square', .03, -60, .06); break;
+    case 'nope': tone(220, .08, 'square', .03); break;
+    case 'hatch': tone(200, .55, 'sawtooth', .04, 700); tone(400, .5, 'triangle', .05, 600, .1); break;
+    case 'win': [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, .2, 'triangle', .07, 0, i * .1)); break;
+  }
+}
+
+/* ---------- state ---------- */
+const LS_KEY = 'tidemark-save-v1';
+let SAVE = { done: {}, notes: {}, deepest: 0 };
+let SET = { sound: true, hl: true, hints: true, reduce: false };
+function loadSave() { try { const r = localStorage.getItem(LS_KEY); if (r) { const o = JSON.parse(r); SAVE = Object.assign(SAVE, o.save || {}); SET = Object.assign(SET, o.set || {}); } } catch (e) { /* storage unavailable */ } }
+function persist() { try { localStorage.setItem(LS_KEY, JSON.stringify({ save: SAVE, set: SET })); } catch (e) { /* storage unavailable */ } }
+const reduceMQ = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+const reduced = () => SET.reduce || reduceMQ.matches;
+
+const G = {
+  idx: 0, level: null, tiles: [], blocks: [], slots: [], hatch: null, start: null,
+  p: null, solved: 0, total: 0, mistakes: 0, time: 0, state: 'menu', particles: [], popups: [], bubbles: [], shake: 0, hudDirty: true, inspectKey: '#', cluesDone: {}
+};
+const held = [];
+const heldDir = () => held.length ? held[held.length - 1] : null;
+
+const inB = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS;
+const blockAt = (x, y) => G.blocks.find(b => !b.held && b.x === x && b.y === y) || null;
+const slotAt = (x, y) => G.slots.find(s => s.x === x && s.y === y) || null;
+function solid(x, y) {
+  if (!inB(x, y)) return true;
+  const ch = G.tiles[y][x];
+  if ('#%&*@!'.includes(ch)) return true;
+  if (ch === 'X') return !G.hatch.open;
+  if (/[1-9]/.test(ch)) return true;
+  return !!blockAt(x, y);
+}
+const facing = () => { const p = G.p, d = DIRS[p.dir]; return [p.x + d[0], p.y + d[1]]; };
+
+function loadLevel(idx) {
+  const L = LEVELS[idx]; const rows = buildRows(L.layout);
+  G.idx = idx; G.level = L; G.tiles = rows.map(r => r.split('')); G.blocks = []; G.slots = []; G.hatch = null;
+  G.particles = []; G.popups = []; G.shake = 0; G.cluesDone = {};
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+    const ch = G.tiles[y][x];
+    if (ch === 'P') { G.start = { x, y }; G.tiles[y][x] = '.'; }
+    else if (ch === 'X') { G.hatch = { x, y, open: false, pulse: 0 }; }
+    else if (/[a-z]/.test(ch)) { G.blocks.push({ key: ch, def: L.blocks[ch], x, y, sx: x, sy: y, locked: false, held: false, fly: null, drop: 0 }); G.tiles[y][x] = '.'; }
+    else if (/[1-9]/.test(ch)) { G.slots.push({ x, y, sym: ch, block: null, color: SLOT_COLORS[(+ch - 1) % SLOT_COLORS.length] }); }
+  }
+  G.total = G.slots.length; G.solved = 0; G.mistakes = 0; G.time = 0; G.inspectKey = '#'; G.hudDirty = true;
+  G.p = { x: G.start.x, y: G.start.y, rx: G.start.x, ry: G.start.y, dir: 0, mv: null, turn: 0, carry: null, anim: 0 };
+  G.state = 'play';
+  for (let i = 0; i < 16; i++) G.bubbles.push({ x: Math.random() * W, y: Math.random() * H, s: 2 + Math.random() * 3, v: 10 + Math.random() * 22, ph: Math.random() * 6 });
+}
+
+/* ---------- gameplay ---------- */
+function tryMove(d) {
+  const p = G.p, [dx, dy] = DIRS[d], nx = p.x + dx, ny = p.y + dy;
+  if (solid(nx, ny)) return false;
+  p.mv = { fx: p.x, fy: p.y, t: 0 }; p.x = nx; p.y = ny; return true;
+}
+function update(dt) {
+  const p = G.p; if (G.state === 'play') G.time += dt;
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt);
+  if (G.hatch && G.hatch.open) G.hatch.pulse += dt;
+  G.blocks.forEach(b => { if (b.fly) { b.fly.t += dt / 0.45; if (b.fly.t >= 1) b.fly = null; } if (b.drop > 0) b.drop = Math.max(0, b.drop - dt); });
+  if (p.mv) {
+    p.mv.t += dt / MOVE_S; p.anim += dt;
+    if (p.mv.t >= 1) { p.rx = p.x; p.ry = p.y; p.mv = null; arrive(); }
+    else { p.rx = p.mv.fx + (p.x - p.mv.fx) * p.mv.t; p.ry = p.mv.fy + (p.y - p.mv.fy) * p.mv.t; }
+  }
+  if (!p.mv && G.state === 'play') {
+    const want = heldDir();
+    if (want === null) { p.turn = 0; p.anim = 0; }
+    else if (want !== p.dir) { p.dir = want; p.turn = TURN_S; }
+    else { if (p.turn > 0) p.turn -= dt; if (p.turn <= 0) tryMove(want); }
+  }
+  // particles
+  G.particles.forEach(q => { q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt; });
+  G.particles = G.particles.filter(q => q.life > 0);
+  G.popups.forEach(q => { q.t += dt; });
+  G.popups = G.popups.filter(q => q.t < 1.3);
+  G.bubbles.forEach(b => { b.y -= b.v * dt; b.ph += dt; if (b.y < -10) { b.y = H + 10; b.x = Math.random() * W; } });
+}
+function arrive() { const h = G.hatch; if (h && h.open && G.p.x === h.x && G.p.y === h.y && G.state === 'play') completeLevel(); }
+
+function interact() {
+  if (G.state !== 'play') return;
+  const p = G.p, [fx, fy] = facing();
+  if (p.carry) {
+    const s = slotAt(fx, fy);
+    if (s) { if (s.block) { feed('info', 'That pedestal is already filled.'); sfx('nope'); return; } dropOnSlot(p.carry, s); return; }
+    const hatchHere = G.hatch && G.hatch.x === fx && G.hatch.y === fy;
+    if (inB(fx, fy) && !solid(fx, fy) && !hatchHere) { const b = p.carry; b.x = fx; b.y = fy; b.held = false; b.drop = 0.2; p.carry = null; sfx('drop'); G.inspectKey = '#'; return; }
+    feed('info', 'There is no room to put it down there.'); sfx('nope');
+  } else {
+    const b = blockAt(fx, fy);
+    if (b && !b.locked) { b.held = true; p.carry = b; sfx('pick'); G.inspectKey = '#'; return; }
+    const s = slotAt(fx, fy);
+    if (s && s.block) { feed('ok', s.block.def.why); }
+  }
+}
+function dropOnSlot(b, s) {
+  const p = G.p;
+  if (b.def.to === s.sym) {
+    b.x = s.x; b.y = s.y; b.locked = true; b.held = false; s.block = b; p.carry = null; G.solved++; G.hudDirty = true; G.cluesDone[s.sym] = (G.cluesDone[s.sym] || 0) + 1;
+    burst(s.x, s.y, s.color); popup(s.x, s.y, 'LOCKED IN', '#6be38a'); sfx('ok');
+    const last = G.solved === G.total;
+    feed('ok', last ? b.def.why + ' Every pedestal is filled. The hatch is open: walk onto it to descend.' : b.def.why);
+    SAVE.notes[G.level.id + ':' + b.key] = true; persist(); G.inspectKey = '#';
+    uiClues();
+    if (last) openHatch();
+  } else {
+    G.mistakes++; G.hudDirty = true; b.held = false; p.carry = null;
+    let msg;
+    if (!SET.hints) msg = 'Not quite. Try another block.';
+    else if (b.def.to === null) msg = b.def.miss;
+    else msg = 'Not here. ' + (G.level.slots[s.sym].hint || 'Re-read the clue.');
+    feed('bad', msg); popup(s.x, s.y, 'NOT QUITE', '#ff6f7d'); sfx('wrong'); if (!reduced()) G.shake = 0.25;
+    flyBack(b, s); G.inspectKey = '#';
+  }
+}
+function flyBack(b, s) {
+  const p = G.p; const taken = (x, y) => solid(x, y) || (p.x === x && p.y === y) || (p.mv && p.mv.fx === x && p.mv.fy === y) || (G.hatch && G.hatch.x === x && G.hatch.y === y);
+  let tx = b.sx, ty = b.sy;
+  if (taken(tx, ty)) {
+    const seen = new Set([tx + ',' + ty]), q = [[tx, ty]]; let found = null;
+    while (q.length && !found) { const [x, y] = q.shift(); for (const [dx, dy] of DIRS) { const nx = x + dx, ny = y + dy, k = nx + ',' + ny; if (!inB(nx, ny) || seen.has(k)) continue; seen.add(k); const ch = G.tiles[ny][nx]; if (ch !== '.' && ch !== ',') { continue; } if (!taken(nx, ny)) { found = [nx, ny]; break; } q.push([nx, ny]); } }
+    if (found) { tx = found[0]; ty = found[1]; }
+  }
+  b.x = tx; b.y = ty; b.fly = { fx: s.x, fy: s.y, t: 0 };
+}
+function openHatch() {
+  G.hatch.open = true; sfx('hatch');
+  popup(G.hatch.x, G.hatch.y, 'HATCH OPEN', '#ffcf5c'); burst(G.hatch.x, G.hatch.y, '#ffcf5c');
+}
+function burst(tx, ty, col) {
+  if (reduced()) return;
+  for (let i = 0; i < 18; i++) { const a = Math.random() * 6.283, s = 60 + Math.random() * 140; G.particles.push({ x: (tx + .5) * TS, y: (ty + .5) * TS, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 30, life: .5 + Math.random() * .5, max: 1, col: Math.random() < .4 ? '#e8f7ff' : col, s: 4 + Math.floor(Math.random() * 4) }); }
+}
+function popup(tx, ty, text, col) { G.popups.push({ x: (tx + .5) * TS, y: ty * TS - 4, text, col, t: 0 }); }
+
+function restartLevel() { held.length = 0; loadLevel(G.idx); uiLevelLoaded(true); }
+
+/* ---------- label fitting ---------- */
+const labelCache = {}; let measureCtx = null;
+function fitLabel(label) {
+  if (labelCache[label]) return labelCache[label];
+  if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
+  const lines = label.split('\n'); let size = 19;
+  for (; size > 10; size--) { measureCtx.font = `700 ${size}px ${BODY_FONT}`; const w = Math.max(...lines.map(s => measureCtx.measureText(s).width)); if (w <= 50 && lines.length * size * 1.05 <= 44) break; }
+  return (labelCache[label] = { lines, size });
+}
+function clearLabelCache() { Object.keys(labelCache).forEach(k => delete labelCache[k]); }
+
+/* ---------- rendering ---------- */
+let ctx = null;
+function spr(img, x, y, s = 1) { ctx.drawImage(img, 0, 0, 16, 16, x, y, TS * s, TS * s); }
+function drawBlock(b, x, y, s = 1) {
+  spr(b.locked ? SPR.blockOk : SPR.block, x, y, s);
+  const L = fitLabel(b.def.label);
+  ctx.font = `700 ${L.size * s}px ${BODY_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = b.locked ? '#c6f7d6' : '#e8f7ff';
+  const cx = x + TS * s / 2, cy = y + TS * s * 0.47;
+  L.lines.forEach((ln, i) => ctx.fillText(ln, cx, cy + (i - (L.lines.length - 1) / 2) * L.size * 1.05 * s));
+}
+function hash(x, y) { return ((x * 73856093) ^ (y * 19349663)) >>> 0; }
+
+function drawBanner(sym, def) {
+  const ts = G.slots.filter(s => s.sym === sym); if (!ts.length) return;
+  const minx = Math.min(...ts.map(s => s.x)), maxx = Math.max(...ts.map(s => s.x)), y = ts[0].y;
+  let by = null; if (y - 1 >= 0 && G.tiles[y - 1][minx] === '#') by = y - 1; else if (y + 1 < ROWS && G.tiles[y + 1][minx] === '#') by = y + 1;
+  if (by === null) return;
+  const x0 = minx * TS + 4, w = (maxx - minx + 1) * TS - 8, y0 = by * TS + 12, h = TS - 24;
+  ctx.fillStyle = '#04101e'; ctx.fillRect(x0, y0, w, h); ctx.strokeStyle = ts[0].color; ctx.lineWidth = 3; ctx.strokeRect(x0 + 1.5, y0 + 1.5, w - 3, h - 3);
+  let size = 15; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (; size > 9; size--) { ctx.font = `700 ${size}px ${BODY_FONT}`; if (ctx.measureText(def.title).width <= w - 14) break; }
+  ctx.fillStyle = ts[0].color; ctx.fillText(def.title, x0 + w / 2, y0 + h / 2 + 1);
+}
+function drawPosMap(t) {
+  const q = [[TS, TS, 8 * TS, 4 * TS, '1'], [9 * TS, TS, 8 * TS, 4 * TS, '2'], [TS, 5 * TS, 8 * TS, 4 * TS, '3'], [9 * TS, 5 * TS, 8 * TS, 4 * TS, '4']];
+  q.forEach(([x, y, w, h, s]) => { ctx.fillStyle = SLOT_COLORS[+s - 1] + '14'; ctx.fillRect(x, y, w, h); });
+  ctx.strokeStyle = 'rgba(62,230,208,.55)'; ctx.lineWidth = 3; ctx.setLineDash([10, 8]);
+  ctx.beginPath(); ctx.moveTo(9 * TS, 1.2 * TS); ctx.lineTo(9 * TS, 8.8 * TS); ctx.moveTo(1.3 * TS, 5 * TS); ctx.lineTo(15.7 * TS, 5 * TS); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(62,230,208,.8)';
+  const tri = (a, b, c, d, e, f) => { ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c, d); ctx.lineTo(e, f); ctx.closePath(); ctx.fill(); };
+  tri(9 * TS, 1.05 * TS, 9 * TS - 8, 1.05 * TS + 14, 9 * TS + 8, 1.05 * TS + 14); tri(15.85 * TS, 5 * TS, 15.85 * TS - 14, 5 * TS - 8, 15.85 * TS - 14, 5 * TS + 8);
+  ctx.font = `700 14px ${BODY_FONT}`; ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left'; ctx.fillText('HIGH QUALITY', 9 * TS + 14, 1.3 * TS); ctx.fillText('LOW QUALITY', 9 * TS + 14, 8.7 * TS);
+  ctx.textAlign = 'left'; ctx.fillText('LOW PRICE', 1.45 * TS, 5 * TS - 12); ctx.textAlign = 'right'; ctx.fillText('HIGH PRICE', 15.6 * TS, 5 * TS - 12);
+}
+
+function render(now) {
+  if (!ctx || !G.level) return;
+  const t = now / 1000, p = G.p, rm = reduced();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.setTransform(VIEW.k, 0, 0, VIEW.k, 0, 0); ctx.save(); ctx.imageSmoothingEnabled = false;
+  if (G.shake > 0 && !rm) ctx.translate((Math.random() - .5) * 8, (Math.random() - .5) * 8);
+  // floor + walls
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+    const ch = G.tiles[y][x];
+    if (ch === '#') { spr(y === 0 && x % 3 === 1 ? SPR.porthole : SPR.wall[(x + y) % 2], x * TS, y * TS); }
+    else if (ch === ',') spr(SPR.grate, x * TS, y * TS);
+    else spr(SPR.floor[hash(x, y) % 4], x * TS, y * TS);
+  }
+  if (G.level.overlay === 'posmap') drawPosMap(t);
+  Object.entries(G.level.slots).forEach(([sym, d]) => { if (d.title) drawBanner(sym, d); });
+  // entities
+  const ents = [];
+  if (G.hatch) { const h = G.hatch; ents.push([h.y - 0.4, () => { spr(h.open ? SPR.hatchO : SPR.hatchC, h.x * TS, h.y * TS); if (h.open) { ctx.globalAlpha = .25 + .2 * Math.sin(h.pulse * 5); ctx.fillStyle = '#6be38a'; ctx.fillRect(h.x * TS + 8, h.y * TS + 8, TS - 16, TS - 16); ctx.globalAlpha = 1; } }]); }
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+    const ch = G.tiles[y][x]; const img = ch === '%' ? SPR.coral : ch === '&' ? SPR.crate : ch === '*' ? SPR.barrel : ch === '@' ? SPR.console : ch === '!' ? SPR.lamp : null;
+    if (img) ents.push([y, () => { ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(x * TS + 10, y * TS + TS - 10, TS - 20, 6); spr(img, x * TS, y * TS); }]);
+  }
+  G.slots.forEach(s => ents.push([s.y - 0.2, () => {
+    spr(s.block ? SPR.pedOk : SPR.pedFor(s.color), s.x * TS, s.y * TS);
+    if (!s.block) { ctx.font = `700 20px ${BODY_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#e8f7ff'; ctx.fillText(s.sym, s.x * TS + TS / 2, s.y * TS + TS / 2 + 1); }
+  }]));
+  G.blocks.forEach(b => {
+    if (b.held) return;
+    if (b.locked) { ents.push([b.y + 0.05, () => drawBlock(b, b.x * TS, b.y * TS - 8)]); return; }
+    ents.push([b.fly ? 99 : b.y + 0.1, () => {
+      let x = b.x * TS, y = b.y * TS;
+      if (b.fly) { const f = b.fly, e = f.t; x = (f.fx + (b.x - f.fx) * e) * TS; y = (f.fy + (b.y - f.fy) * e) * TS - Math.sin(e * Math.PI) * 60; }
+      else if (b.drop > 0) y -= Math.sin((b.drop / 0.2) * Math.PI) * 6;
+      ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(b.x * TS + 8, b.y * TS + TS - 8, TS - 16, 5);
+      drawBlock(b, x, y);
+    }]);
+  });
+  ents.push([p.ry + 0.45, () => {
+    const moving = !!p.mv, f = moving ? (Math.floor(p.anim * 8) % 2) : 0, bob = moving && f ? -3 : 0;
+    const x = p.rx * TS, y = p.ry * TS;
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(x + 14, y + TS - 9, TS - 28, 6);
+    spr(SPR.diver[p.dir][f], x, y - 6 + bob);
+    if (p.carry) { const s = .8, off = TS * (1 - s) / 2; drawBlock(p.carry, x + off, y - 62 + bob + (rm ? 0 : Math.sin(t * 4) * 1.5), s); }
+  }]);
+  ents.sort((a, b) => a[0] - b[0]).forEach(e => e[1]());
+  // facing marker
+  if (G.state === 'play') {
+    const [fx, fy] = facing();
+    if (inB(fx, fy)) {
+      const interactive = (!p.carry && ((blockAt(fx, fy) && !blockAt(fx, fy).locked) || (slotAt(fx, fy) && slotAt(fx, fy).block))) || (p.carry && (slotAt(fx, fy) ? !slotAt(fx, fy).block : (!solid(fx, fy) && !(G.hatch && G.hatch.x === fx && G.hatch.y === fy))));
+      if (interactive) {
+        const a = rm ? 1 : .65 + .35 * Math.sin(t * 7), x = fx * TS, y = fy * TS, c = 14, th = 4;
+        ctx.fillStyle = `rgba(255,207,92,${a})`;
+        [[x + 2, y + 2, 1, 1], [x + TS - 2, y + 2, -1, 1], [x + 2, y + TS - 2, 1, -1], [x + TS - 2, y + TS - 2, -1, -1]].forEach(([cx, cy, sx, sy]) => { ctx.fillRect(sx > 0 ? cx : cx - c, sy > 0 ? cy : cy - th, c, th); ctx.fillRect(sx > 0 ? cx : cx - th, sy > 0 ? cy : cy - c, th, c); });
+      }
+    }
+  }
+  // lamp glow
+  ctx.globalCompositeOperation = 'lighter';
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (G.tiles[y][x] === '!') { const g = ctx.createRadialGradient(x * TS + 32, y * TS + 14, 4, x * TS + 32, y * TS + 14, 120); const a = rm ? .22 : .18 + .05 * Math.sin(t * 2 + x); g.addColorStop(0, `rgba(255,207,92,${a})`); g.addColorStop(1, 'rgba(255,207,92,0)'); ctx.fillStyle = g; ctx.fillRect(x * TS - 90, y * TS - 110, 244, 244); }
+  if (!rm) { ctx.fillStyle = 'rgba(159,244,255,.035)'; for (let i = 0; i < 3; i++) { const ox = ((t * 14 + i * 420) % (W + 400)) - 300; ctx.beginPath(); ctx.moveTo(ox, 0); ctx.lineTo(ox + 90, 0); ctx.lineTo(ox - 160, H); ctx.lineTo(ox - 250, H); ctx.closePath(); ctx.fill(); } }
+  ctx.globalCompositeOperation = 'source-over';
+  // particles, bubbles
+  G.particles.forEach(q => { ctx.globalAlpha = Math.max(0, q.life); ctx.fillStyle = q.col; ctx.fillRect(Math.round(q.x), Math.round(q.y), q.s, q.s); }); ctx.globalAlpha = 1;
+  if (!rm) G.bubbles.forEach(b => { ctx.fillStyle = 'rgba(159,244,255,.32)'; const bx = Math.round(b.x + Math.sin(b.ph) * 6); ctx.fillRect(bx, Math.round(b.y), b.s, b.s); ctx.fillStyle = 'rgba(232,247,255,.5)'; ctx.fillRect(bx, Math.round(b.y), 1, 1); });
+  // depth tint + vignette
+  ctx.fillStyle = `rgba(2,6,16,${0.04 + (G.level.depth / 7000) * 0.3})`; ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(SPR.vignette, 0, 0, W, H);
+  // popups
+  G.popups.forEach(q => { const k = q.t / 1.3; ctx.globalAlpha = k < .7 ? 1 : 1 - (k - .7) / .3; ctx.font = `700 22px ${BODY_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 5; ctx.strokeStyle = '#031019'; ctx.lineJoin = 'round'; const yy = q.y - k * 40; ctx.strokeText(q.text, q.x, yy); ctx.fillStyle = q.col; ctx.fillText(q.text, q.x, yy); }); ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+/* ---------- inspector text ---------- */
+function inspectState() {
+  const p = G.p; if (!p) return { key: '', html: '' };
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  if (p.carry) { const d = p.carry.def; return { key: 'c' + p.carry.key, html: `<div class="ins-tag">Carrying</div><div class="ins-main">${esc(d.text)}</div><div class="ins-sub">Face a pedestal and press <kbd>Space</kbd> to place it. On open floor, <kbd>Space</kbd> puts it down.</div>` }; }
+  const [fx, fy] = facing(); const b = inB(fx, fy) ? blockAt(fx, fy) : null; const s = inB(fx, fy) ? slotAt(fx, fy) : null;
+  if (b && !b.locked) return { key: 'b' + b.key, html: `<div class="ins-tag">Block</div><div class="ins-main">${esc(b.def.text)}</div><div class="ins-sub">Press <kbd>Space</kbd> to pick it up.</div>` };
+  if (s) {
+    const def = G.level.slots[s.sym];
+    if (s.block) return { key: 'sd' + s.x + s.y, html: `<div class="ins-tag"><i class="pin" style="--c:${s.color}">${s.sym}</i>Locked in</div><div class="ins-main">${esc(s.block.def.text)}</div><div class="ins-sub">${esc(s.block.def.why)}</div>` };
+    return { key: 's' + s.sym, html: `<div class="ins-tag"><i class="pin" style="--c:${s.color}">${s.sym}</i>Pedestal ${s.sym}</div><div class="ins-main">${esc(def.clue)}</div>` };
+  }
+  return { key: 'idle', html: `<div class="ins-tag">What you face</div><div class="ins-sub">Walk up to a block and press <kbd>Space</kbd> to lift it. Whatever is in front of you is described here. Hover any block or pedestal with the mouse to read it from a distance.</div>` };
+}
+
+/* ===================== UI ===================== */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const SCREENS = ['title', 'select', 'notes', 'how', 'settings', 'game'];
+let cur = 'title', settingsFrom = 'title', hudSec = -1, lastInspect = '';
+
+const STAR = ['...x...', '...x...', 'xxxxxxx', '.xxxxx.', '..xxx..', '.xx.xx.', '.x...x.'];
+function star(on) { let r = ''; STAR.forEach((row, y) => { for (let x = 0; x < 7; x++) if (row[x] === 'x') r += `<rect x="${x}" y="${y}" width="1" height="1"/>`; }); return `<svg class="star${on ? ' on' : ''}" viewBox="0 0 7 7" shape-rendering="crispEdges" aria-hidden="true">${r}</svg>`; }
+const stars = (n) => `<span class="stars" role="img" aria-label="${n} of 3 stars">${star(n >= 1)}${star(n >= 2)}${star(n >= 3)}</span>`;
+const fmtTime = (s) => { s = Math.floor(s); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
+
+/* ----- progress helpers ----- */
+const avail = () => LEVELS.map((_, i) => i).filter(i => SET.hl || !LEVELS[i].hl);
+const roomNo = (i) => avail().indexOf(i) + 1;
+const isDone = (i) => !!SAVE.done[LEVELS[i].id];
+function unlocked(i) { if (SET.openAll) return true; const a = avail(), k = a.indexOf(i); return k <= 0 || isDone(a[k - 1]); }
+function nextRoom() { const a = avail(); const n = a.find(i => !isDone(i)); return n === undefined ? a[a.length - 1] : n; }
+function totals() { const a = avail(); let st = 0, cl = 0; a.forEach(i => { const d = SAVE.done[LEVELS[i].id]; if (d) { cl++; st += d.stars; } }); return { st, cl, n: a.length }; }
+
+/* ----- navigation ----- */
+function show(name) {
+  SCREENS.forEach(n => { $('#scr-' + n).hidden = n !== name; });
+  cur = name; window.scrollTo(0, 0);
+  if (name === 'title') buildTitle();
+  if (name === 'select') buildSelect();
+  if (name === 'notes') buildNotes('all');
+  if (name === 'settings') buildSettings();
+  if (name === 'game') fitCanvas(); else hideTip();
+  const h = $('#scr-' + name + ' [data-focus]'); if (h) h.focus({ preventScroll: true });
+}
+
+/* ----- canvas fitting: whole-number pixel scale when it nearly fills the space ----- */
+const wideMQ = window.matchMedia ? window.matchMedia('(min-width: 901px)') : { matches: true };
+function fitCanvas() {
+  const g = $('#scr-game'); if (g.hidden) return; const cv = $('#cv');
+  const unit = COLS * 16, wide = wideMQ.matches, frame = 8;
+  const avail = Math.max(240, g.clientWidth - frame - (wide ? 340 + 16 : 0));
+  const m = Math.floor(avail / unit);
+  const w = Math.floor((m >= 2 && (unit * m) / avail >= 0.85) ? unit * m : avail);
+  g.style.setProperty('--cv-w', wide ? w + 'px' : 'auto');
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(w * dpr * H / W); VIEW.k = cv.width / W;
+}
+window.addEventListener('resize', fitCanvas);
+
+/* ----- hover tooltip: read any block or pedestal from across the room ----- */
+function hideTip() { const t = $('#tip'); if (t) t.hidden = true; }
+function onCanvasMove(e) {
+  if (cur !== 'game' || G.state !== 'play') { hideTip(); return; }
+  const r = $('#cv').getBoundingClientRect(), tx = Math.floor((e.clientX - r.left) / r.width * COLS), ty = Math.floor((e.clientY - r.top) / r.height * ROWS);
+  let html = '';
+  const b = G.blocks.find(k => !k.held && ((k.x === tx && k.y === ty) || (k.locked && k.x === tx && k.y === ty)));
+  const s = slotAt(tx, ty);
+  if (b && !b.fly) html = `<b>${esc(b.def.text)}</b>`;
+  else if (s) html = `<span class="tip-pin" style="--c:${s.color}">${s.sym}</span> ${esc(G.level.slots[s.sym].clue)}`;
+  const t = $('#tip'); if (!html) { t.hidden = true; return; }
+  t.innerHTML = html; t.hidden = false;
+  const pad = 14, tw = t.offsetWidth, th = t.offsetHeight;
+  let x = e.clientX + pad, y = e.clientY + pad; if (x + tw > window.innerWidth - 8) x = e.clientX - tw - pad; if (y + th > window.innerHeight - 8) y = e.clientY - th - pad;
+  t.style.left = Math.max(8, x) + 'px'; t.style.top = Math.max(8, y) + 'px';
+}
+function overlay(id, on) { const o = $('#' + id); o.hidden = !on; if (on) { const b = $('[data-focus]', o); if (b) b.focus(); } }
+function closeOverlays() { ['ov-brief', 'ov-pause', 'ov-done', 'ov-final'].forEach(id => { $('#' + id).hidden = true; }); }
+
+/* ----- title ----- */
+function buildTitle() {
+  const t = totals(), started = t.cl > 0;
+  $('#btn-play').textContent = started ? `Continue: Room ${roomNo(nextRoom())}` : 'Start diving';
+  $('#log-depth').textContent = SAVE.deepest + ' m';
+  $('#log-rooms').textContent = `${t.cl} of ${t.n}`;
+  $('#log-stars').innerHTML = `${t.st} of ${t.n * 3}`;
+  $('#log-fill').style.setProperty('--fill', Math.round((t.cl / t.n) * 100) + '%');
+  const nx = LEVELS[nextRoom()];
+  $('#log-next').innerHTML = t.cl === t.n ? 'All rooms cleared. Replay any room for three stars.' : `Next: <b>${esc(nx.name)}</b> <span class="chip">${esc(nx.topic)}</span>`;
+}
+
+/* ----- room select ----- */
+function buildSelect() {
+  const g = $('#room-grid'); g.innerHTML = '';
+  avail().forEach((i, k) => {
+    const L = LEVELS[i], d = SAVE.done[L.id], open = unlocked(i);
+    const b = document.createElement('button'); b.className = 'room' + (d ? ' cleared' : '') + (open ? '' : ' sealed'); b.type = 'button'; b.disabled = !open;
+    b.innerHTML = `<span class="room-n">${k + 1}</span><span class="room-name">${esc(L.name)}</span><span class="room-meta"><span class="chip">${esc(L.topic)}</span>${L.hl ? '<span class="chip hl">HL</span>' : ''}</span><span class="room-foot">${open ? (d ? stars(d.stars) + `<span>${fmtTime(d.time)}</span>` : `<span class="dim">Depth ${L.depth} m</span>`) : '<span class="dim">Sealed. Clear the room before it.</span>'}</span>`;
+    b.addEventListener('click', () => { sfx('click'); startLevel(i); });
+    g.appendChild(b);
+  });
+}
+
+/* ----- study notes ----- */
+function buildNotes(filter) {
+  $$('#notes-tabs button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === filter)));
+  const root = $('#notes-list'); root.innerHTML = ''; let found = 0, all = 0;
+  avail().forEach(i => {
+    const L = LEVELS[i]; if (filter !== 'all' && !L.topic.startsWith(filter)) return;
+    const keys = Object.keys(L.blocks).filter(k => L.blocks[k].to), got = keys.filter(k => SAVE.notes[L.id + ':' + k]);
+    found += got.length; all += keys.length;
+    const sec = document.createElement('section'); sec.className = 'note-room';
+    sec.innerHTML = `<h3><span class="chip">${esc(L.topic)}</span>${esc(L.name)}<small>${got.length} of ${keys.length} found</small></h3>`;
+    const ul = document.createElement('ul');
+    keys.forEach(k => { const d = L.blocks[k], on = !!SAVE.notes[L.id + ':' + k]; const li = document.createElement('li'); li.className = on ? '' : 'locked'; li.innerHTML = on ? `<b>${esc(d.text)}</b><span>${esc(d.why)}</span>` : `<b>Not found yet</b><span>Place this block correctly in the room to add it here.</span>`; ul.appendChild(li); });
+    sec.appendChild(ul); root.appendChild(sec);
+  });
+  $('#notes-count').textContent = `${found} of ${all} notes collected`;
+}
+
+/* ----- settings ----- */
+const SETTING_ROWS = [
+  ['sound', 'Sound effects', 'Short chirps for lifting, placing and unlocking.'],
+  ['hints', 'Hints on wrong answers', 'A wrong block explains why it does not fit.'],
+  ['hl', 'Include HL content', 'Adds Room 5 on the importance of market share and leadership (HL only).'],
+  ['reduce', 'Reduce motion', 'Turns off screen shake, light rays, bubbles and particles.'],
+  ['openAll', 'Open every room', 'Skip the order and revise any room straight away.']
+];
+function buildSettings() {
+  const root = $('#set-list'); root.innerHTML = '';
+  SETTING_ROWS.forEach(([k, name, desc]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'tog'; b.setAttribute('role', 'switch'); b.setAttribute('aria-checked', String(!!SET[k]));
+    b.innerHTML = `<span class="tog-t"><b>${name}</b><small>${desc}</small></span><span class="tog-s">${SET[k] ? 'On' : 'Off'}</span>`;
+    b.addEventListener('click', () => { SET[k] = !SET[k]; persist(); b.setAttribute('aria-checked', String(!!SET[k])); $('.tog-s', b).textContent = SET[k] ? 'On' : 'Off'; if (k === 'sound' && SET.sound) sfx('click'); if (k === 'hl') clearBgCache(); });
+    root.appendChild(b);
+  });
+}
+
+/* ----- level lifecycle ----- */
+function startLevel(i) {
+  held.length = 0; closeOverlays(); clearLabelCache(); loadLevel(i); G.state = 'brief'; show('game'); uiLevelLoaded(false);
+}
+function uiLevelLoaded(skipBrief) {
+  const L = G.level; lastInspect = '';
+  $('#h-room').textContent = `Room ${roomNo(G.idx)} of ${avail().length}`;
+  $('#h-name').textContent = L.name; $('#h-topic').textContent = L.topic; $('#h-hl').hidden = !L.hl;
+  $('#h-depth').textContent = L.depth + ' m'; hudSec = -1; uiHud(); uiClues();
+  feed('info', 'Face a block and press Space to pick it up.');
+  if (skipBrief) { closeOverlays(); G.state = 'play'; return; }
+  $('#b-room').textContent = `Room ${roomNo(G.idx)} of ${avail().length}`; $('#b-name').textContent = L.name;
+  $('#b-topic').textContent = L.topic; $('#b-hl').hidden = !L.hl; $('#b-depth').textContent = `Depth ${L.depth} m`; $('#b-text').textContent = L.brief;
+  const a = totals(); $('#b-best').innerHTML = SAVE.done[L.id] ? `Best: ${stars(SAVE.done[L.id].stars)} in ${fmtTime(SAVE.done[L.id].time)}` : '';
+  overlay('ov-brief', true);
+}
+function beginPlay() { $('#ov-brief').hidden = true; G.state = 'play'; sfx('click'); }
+function uiHud() {
+  const s = Math.floor(G.time); if (s !== hudSec) { hudSec = s; $('#h-time').textContent = fmtTime(G.time); }
+  if (G.hudDirty) { G.hudDirty = false; $('#h-solved').textContent = `${G.solved} of ${G.total}`; $('#h-miss').textContent = String(G.mistakes); }
+}
+function uiClues() {
+  const ul = $('#clues'); ul.innerHTML = '';
+  Object.entries(G.level.slots).forEach(([sym, d]) => {
+    const tiles = G.slots.filter(s => s.sym === sym), n = tiles.length, got = tiles.filter(s => s.block).length;
+    const li = document.createElement('li'); li.className = 'clue' + (got === n ? ' done' : ''); li.style.setProperty('--c', tiles[0].color);
+    li.innerHTML = `<i class="pin">${sym}</i><div>${d.title ? `<b>${esc(d.title)}</b>` : ''}<span>${esc(d.clue)}</span></div><em class="cnt">${got}/${n}</em>`;
+    ul.appendChild(li);
+  });
+  $('#clue-count').textContent = `${G.solved} of ${G.total} placed`;
+}
+function feed(type, msg) {
+  const el = $('#feed'); el.className = 'feed ' + type; $('#feed-tag').textContent = type === 'ok' ? 'Correct' : type === 'bad' ? 'Not quite' : 'Tip'; $('#feed-msg').textContent = msg;
+}
+function updateInspector() {
+  const s = inspectState(); const k = s.key + '|' + G.solved; if (k === lastInspect && G.inspectKey !== '#') return; lastInspect = k; G.inspectKey = '';
+  $('#inspector').innerHTML = s.html;
+}
+
+/* ----- completion ----- */
+function completeLevel() {
+  G.state = 'done'; held.length = 0; sfx('win');
+  const stars_ = G.mistakes === 0 ? 3 : G.mistakes <= 2 ? 2 : 1, L = G.level, prev = SAVE.done[L.id];
+  const rec = { stars: Math.max(stars_, prev ? prev.stars : 0), time: prev ? Math.min(prev.time, G.time) : G.time, mistakes: prev ? Math.min(prev.mistakes, G.mistakes) : G.mistakes };
+  SAVE.done[L.id] = rec; SAVE.deepest = Math.max(SAVE.deepest, L.depth); persist();
+  const a = avail(), last = a.indexOf(G.idx) === a.length - 1;
+  setTimeout(() => {
+    if (G.state !== 'done') return;
+    if (last && a.every(i => isDone(i))) { const t = totals(); $('#f-stats').innerHTML = `<div><b>${t.st} of ${t.n * 3}</b><span>stars</span></div><div><b>${t.cl} of ${t.n}</b><span>rooms cleared</span></div><div><b>${SAVE.deepest} m</b><span>deepest point</span></div>`; overlay('ov-final', true); sfx('win'); return; }
+    $('#d-stars').innerHTML = stars(stars_); $('#d-name').textContent = L.name;
+    $('#d-stats').innerHTML = `<div><b>${fmtTime(G.time)}</b><span>time</span></div><div><b>${G.mistakes}</b><span>wrong placements</span></div><div><b>${L.depth} m</b><span>depth</span></div>`;
+    $('#d-tip').textContent = L.tip;
+    $('#d-next').hidden = last; overlay('ov-done', true);
+  }, reduced() ? 100 : 650);
+}
+
+/* ----- pause ----- */
+function pauseGame() { if (G.state !== 'play') return; G.state = 'pause'; held.length = 0; overlay('ov-pause', true); }
+function resumeGame() { if (G.state !== 'pause') return; $('#ov-pause').hidden = true; G.state = 'play'; }
+
+/* ----- input ----- */
+const KEYMAP = { s: 0, ArrowDown: 0, w: 1, ArrowUp: 1, a: 2, ArrowLeft: 2, d: 3, ArrowRight: 3 };
+const dirKey = (e) => { const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; return k in KEYMAP ? KEYMAP[k] : undefined; };
+window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'Escape') {
+    if (cur === 'game') { if (G.state === 'play') pauseGame(); else if (G.state === 'pause') resumeGame(); else if (G.state === 'brief' || G.state === 'done') { closeOverlays(); G.state = 'menu'; show('select'); } }
+    else if (cur === 'settings') show(settingsFrom); else if (cur !== 'title') show('title');
+    e.preventDefault(); return;
+  }
+  if (cur !== 'game' || G.state !== 'play') return;
+  const d = dirKey(e), k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (d !== undefined || k === ' ' || k === 'Spacebar' || k === 'r' || k === 'p' || k === 'm') {
+    if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); e.preventDefault();
+  }
+  if (d !== undefined) { if (!held.includes(d)) held.push(d); return; }
+  if (e.repeat) return;
+  if (k === ' ' || k === 'Spacebar') interact();
+  else if (k === 'r') restartLevel();
+  else if (k === 'p') pauseGame();
+  else if (k === 'm') { SET.sound = !SET.sound; persist(); feed('info', SET.sound ? 'Sound on.' : 'Sound off.'); }
+}, { passive: false });
+window.addEventListener('keyup', (e) => {
+  const d = dirKey(e); if (d !== undefined) { const i = held.indexOf(d); if (i >= 0) held.splice(i, 1); }
+  if (cur === 'game' && G.state === 'play' && (e.key === ' ' || e.key === 'Spacebar')) e.preventDefault();
+});
+window.addEventListener('blur', () => { held.length = 0; if (cur === 'game') pauseGame(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { held.length = 0; if (cur === 'game') pauseGame(); } });
+
+/* touch pad */
+function bindPad() {
+  const map = { 'tp-up': 1, 'tp-down': 0, 'tp-left': 2, 'tp-right': 3 };
+  Object.entries(map).forEach(([id, d]) => {
+    const b = $('#' + id);
+    const on = (e) => { e.preventDefault(); if (G.state === 'play' && !held.includes(d)) held.push(d); };
+    const off = (e) => { e.preventDefault(); const i = held.indexOf(d); if (i >= 0) held.splice(i, 1); };
+    b.addEventListener('pointerdown', on); ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, off));
+  });
+  $('#tp-act').addEventListener('pointerdown', (e) => { e.preventDefault(); interact(); });
+}
+
+/* ----- wiring ----- */
+function wire() {
+  const go = (id, fn) => $('#' + id).addEventListener('click', (e) => { sfx('click'); fn(e); });
+  go('btn-play', () => startLevel(nextRoom()));
+  go('btn-select', () => show('select')); go('btn-notes', () => show('notes')); go('btn-how', () => show('how'));
+  go('btn-settings', () => { settingsFrom = 'title'; show('settings'); });
+  $$('[data-back]').forEach(b => b.addEventListener('click', () => { sfx('click'); show(b.dataset.back === 'prev' ? settingsFrom : b.dataset.back); }));
+  $$('#notes-tabs button').forEach(b => b.addEventListener('click', () => { sfx('click'); buildNotes(b.dataset.f); }));
+  go('b-go', beginPlay); go('b-back', () => { closeOverlays(); G.state = 'menu'; show('select'); });
+  go('h-pause', pauseGame); go('h-restart', restartLevel);
+  go('p-resume', resumeGame); go('p-restart', () => { $('#ov-pause').hidden = true; restartLevel(); });
+  go('p-select', () => { closeOverlays(); G.state = 'menu'; show('select'); });
+  go('p-settings', () => { settingsFrom = 'game'; show('settings'); });
+  go('p-title', () => { closeOverlays(); G.state = 'menu'; show('title'); });
+  go('d-next', () => { const a = avail(), n = a[a.indexOf(G.idx) + 1]; if (n !== undefined) startLevel(n); });
+  go('d-again', () => { closeOverlays(); startLevel(G.idx); }); go('d-select', () => { closeOverlays(); G.state = 'menu'; show('select'); });
+  go('f-notes', () => { closeOverlays(); G.state = 'menu'; show('notes'); }); go('f-select', () => { closeOverlays(); G.state = 'menu'; show('select'); }); go('f-title', () => { closeOverlays(); G.state = 'menu'; show('title'); });
+  let armed = 0;
+  $('#btn-reset').addEventListener('click', (e) => {
+    const b = e.currentTarget; if (!armed) { armed = 1; b.textContent = 'Press again to erase everything'; b.classList.add('danger'); setTimeout(() => { armed = 0; b.textContent = 'Erase progress and notes'; b.classList.remove('danger'); }, 3500); return; }
+    SAVE = { done: {}, notes: {}, deepest: 0 }; persist(); armed = 0; b.textContent = 'Progress erased'; b.classList.remove('danger'); sfx('wrong');
+    setTimeout(() => { b.textContent = 'Erase progress and notes'; }, 1800);
+  });
+  bindPad();
+  const cvEl = $('#cv'); cvEl.addEventListener('mousemove', onCanvasMove); cvEl.addEventListener('mouseleave', hideTip);
+}
+
+/* ----- background scene (low-res canvas, scaled up) ----- */
+const BG = { c: null, x: null, w: 320, h: 180, fish: [], bub: [], dirty: true, last: 0 };
+function clearBgCache() { BG.dirty = true; }
+function initBg() {
+  BG.c = $('#bg'); BG.c.width = BG.w; BG.c.height = BG.h; BG.x = BG.c.getContext('2d'); BG.x.imageSmoothingEnabled = false;
+  for (let i = 0; i < 7; i++) BG.fish.push({ x: Math.random() * BG.w, y: 95 + Math.random() * 55, v: 4 + Math.random() * 8, dir: Math.random() < .5 ? 1 : -1, s: .6 + Math.random() * .8 });
+  for (let i = 0; i < 40; i++) BG.bub.push({ x: Math.random() * BG.w, y: Math.random() * BG.h, v: 5 + Math.random() * 12, ph: Math.random() * 6 });
+}
+const FISH = ['....xxx.....', '..xxxxxxx.x.', '.xxxxxxxxxxx', '..xxxxxxx.x.', '....xxx.....'];
+function drawBg(now) {
+  const x = BG.x, t = now / 1000, rm = reduced();
+  const top = [14, 62, 96], bot = [4, 9, 20];
+  for (let y = 0; y < BG.h; y += 6) { const k = Math.pow(y / BG.h, .8); x.fillStyle = `rgb(${top.map((c, i) => Math.round(c + (bot[i] - c) * k)).join(',')})`; x.fillRect(0, y, BG.w, 6); }
+  x.fillStyle = 'rgba(159,244,255,.05)';
+  for (let i = 0; i < 4; i++) { const ox = rm ? 60 + i * 80 : ((t * 4 + i * 90) % (BG.w + 160)) - 60; x.beginPath(); x.moveTo(ox, 0); x.lineTo(ox + 26, 0); x.lineTo(ox - 40, BG.h); x.lineTo(ox - 76, BG.h); x.closePath(); x.fill(); }
+  x.fillStyle = '#071423'; x.fillRect(0, 160, BG.w, 20);
+  for (let i = 0; i < 40; i++) { const h = 4 + ((i * 37) % 9); x.fillRect(i * 8, 160 - h, 6, h); }
+  x.fillStyle = '#0a2036'; for (let i = 0; i < 12; i++) { const bx = 10 + i * 27, h = 12 + ((i * 53) % 24), sw = rm ? 0 : Math.round(Math.sin(t + i) * 1.5); for (let j = 0; j < h; j += 3) x.fillRect(bx + (j > h / 2 ? sw : 0), 160 - j, 2, 3); }
+  BG.fish.forEach(f => { if (!rm) { f.x += f.v * f.dir * .016; if (f.x > BG.w + 20) f.x = -20; if (f.x < -20) f.x = BG.w + 20; } x.fillStyle = 'rgba(62,230,208,.32)'; for (let r = 0; r < FISH.length; r++) for (let c = 0; c < 12; c++) if (FISH[r][c] === 'x') x.fillRect(Math.round(f.x + (f.dir > 0 ? c : 11 - c)), Math.round(f.y + r), 1, 1); });
+  if (!rm) BG.bub.forEach(b => { b.y -= b.v * .016; if (b.y < -2) { b.y = BG.h + 2; b.x = Math.random() * BG.w; } x.fillStyle = 'rgba(232,247,255,.28)'; x.fillRect(Math.round(b.x + Math.sin(t + b.ph) * 2), Math.round(b.y), 1, 1); });
+}
+
+/* ----- boot ----- */
+let lastT = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  if (cur === 'game' && G.level) {
+    if (G.state === 'play' || G.state === 'brief' || G.state === 'done') update(dt);
+    render(now); if (G.state === 'play') updateInspector(); uiHud();
+  }
+  if (!reduced() || BG.dirty) { drawBg(now); BG.dirty = false; }
+  requestAnimationFrame(frame);
+}
+function boot() {
+  loadSave(); buildSprites(); ctx = $('#cv').getContext('2d'); ctx.imageSmoothingEnabled = false; initBg(); wire();
+  show('title'); requestAnimationFrame((t) => { lastT = t; frame(t); });
+}
+const fontsReady = (document.fonts && document.fonts.load) ? Promise.race([Promise.all([document.fonts.load('700 16px "Pixelify Sans"'), document.fonts.load('16px "Press Start 2P"')]).catch(() => null), new Promise(r => setTimeout(r, 1800))]) : Promise.resolve();
+fontsReady.then(boot);
+
+</script>
+
+</body></html>
